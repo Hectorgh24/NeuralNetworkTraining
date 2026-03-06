@@ -44,8 +44,10 @@ Thumbs.db
 #                       22MB adl_data + 11MB fall_data + 132MB splits)
 data/UniMiB-SHAR/
 
-# MAT files (MATLAB data format - not needed for TensorFlow/Keras)
+# Data files (MAT/NPZ format - large datasets, not committed to git)
+# Use Git LFS or external storage for large datasets
 *.mat
+*.npz
 
 # TensorFlow / Keras model files (generated during training)
 .keras/
