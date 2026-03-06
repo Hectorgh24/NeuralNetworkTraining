@@ -1,4 +1,8 @@
-# Python cache
+# ============================================================================
+# TensorFlow Neural Network Training - .gitignore Configuration
+# ============================================================================
+
+# Python and packaging
 __pycache__/
 *.py[cod]
 *$py.class
@@ -27,64 +31,15 @@ share/python-wheels/
 MANIFEST
 
 # Jupyter Notebook
-.ipynb_checkpoints
+.ipynb_checkpoints/
 *.ipynb
 
-# IDEs
+# IDE and editor configurations
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.DS_Store
-Thumbs.db
-
-# Historical dataset (UniMiB-SHAR reference data - NOT needed for personal training)
-# Total size: ~260 MB (33MB acc_data + 33MB two_classes_data + 28MB full_data +
-#                       22MB adl_data + 11MB fall_data + 132MB splits)
-data/UniMiB-SHAR/
-
-# Data files (MAT/NPZ format - large datasets, not committed to git)
-# Use Git LFS or external storage for large datasets
-*.mat
-*.npz
-
-# TensorFlow / Keras model files (generated during training)
-.keras/
-*.h5
-*.hdf5
-*.pb
-*.ckpt*
-*.pth
-
-# Model checkpoints and weights (will be generated during training)
-models/
-checkpoints/
-weights/
-*.weights
-saved_models/
-
-# Logs and other training artifacts
-logs/
-runs/
-*.log
-.wandb/
-tensorboard_logs/
-
-# Large data files (keep only your custom data)
-*.csv
-*.xlsx
-*.json
-
-# Temporary files
-*.tmp
-*.temp
-*.bak
-
-# Environment variables (NEVER commit these)
-.env
-.env.local
-.env.*.local
 
 # OS-specific files
 .DS_Store
@@ -95,9 +50,94 @@ tensorboard_logs/
 ehthumbs.db
 Thumbs.db
 
-# Keep in repository:
-# ✓ Your TensorFlow/Keras Python code
-# ✓ requirements.txt (dependencies)
-# ✓ README.md (documentation)
-# ✓ Your custom training data in data/raw/ or data/custom/
-# ✓ Configuration files (config.yaml, etc.)
+# ============================================================================
+# Data and Datasets (Local Only - Not Committed to Git)
+# ============================================================================
+
+# Complete data directory
+# Preserve locally: data/raw/, data/raw_float64_original/, data/processed/
+# Users must generate these locally from source datasets using conversion scripts
+data/
+
+# Historical datasets reference (not needed for personal training)
+data/UniMiB-SHAR/
+
+# Dataset file formats
+# Keep files locally for training, regenerate using:
+# - convert_mat_to_npz.py       (MAT format to NumPy)
+# - convert_to_float32.py        (float64 to float32 optimization)
+*.mat
+*.npz
+
+# ============================================================================
+# Model Artifacts and Training Outputs
+# ============================================================================
+
+# TensorFlow/Keras model files (generated during training)
+.keras/
+*.h5
+*.hdf5
+*.pb
+*.ckpt*
+*.pth
+
+# Trained model weights and checkpoints
+models/
+checkpoints/
+weights/
+*.weights
+saved_models/
+
+# Training logs and metrics
+logs/
+runs/
+*.log
+.wandb/
+tensorboard_logs/
+
+# ============================================================================
+# Large Data Files
+# ============================================================================
+
+# Tabular and structured data
+*.csv
+*.xlsx
+*.json
+
+# ============================================================================
+# Temporary and Cache Files
+# ============================================================================
+
+*.tmp
+*.temp
+*.bak
+
+# ============================================================================
+# Secrets and Configuration
+# ============================================================================
+
+# Environment variables and secrets (NEVER commit)
+.env
+.env.local
+.env.*.local
+
+# ============================================================================
+# Repository Contents (What Should Be Committed)
+# ============================================================================
+#
+# ✓ Source code:
+#   - src/*.py (training scripts, models, utilities)
+#   - convert_mat_to_npz.py (dataset format conversion)
+#   - convert_to_float32.py (dataset optimization)
+#
+# ✓ Configuration:
+#   - requirements.txt (Python dependencies)
+#   - README.md (project documentation)
+#   - config.yaml or similar (hyperparameters, settings)
+#
+# ✓ Data structure (directories only, files ignored):
+#   - data/raw/ (source datasets - .npz files generated locally)
+#   - data/processed/ (processed datasets - generated locally)
+#   - data/raw_float64_original/ (backup datasets - generated locally)
+#
+# ============================================================================
