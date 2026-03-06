@@ -1,0 +1,89 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# TensorFlow / Keras
+.keras/
+*.h5
+*.hdf5
+*.pb
+
+# Results from old experiments (not needed for training)
+data/UniMiB-SHAR/data/results/
+
+# Model checkpoints and weights (will be generated during training)
+models/
+checkpoints/
+weights/
+*.weights
+saved_models/
+
+# Logs and other training artifacts
+logs/
+runs/
+*.log
+.wandb/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IMPORTANT: Keep training data
+# DO NOT ignore these files, they are required for training:
+# - data/UniMiB-SHAR/data/*_data.mat
+# - data/UniMiB-SHAR/data/*_labels.mat
+# - data/UniMiB-SHAR/data/*_names.mat
+# - data/UniMiB-SHAR/data/split/
+# - data/UniMiB-SHAR/code/
