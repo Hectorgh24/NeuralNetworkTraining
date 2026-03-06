@@ -1,0 +1,22 @@
+# TensorFlow Neural Network Training - Dependencias
+
+# Machine Learning Framework
+tensorflow>=2.12.0
+keras>=2.12.0
+
+# Ciencia de datos y análisis
+numpy>=1.23.0
+scipy>=1.9.0
+scikit-learn>=1.2.0
+pandas>=1.5.0
+
+# Visualización
+matplotlib>=3.6.0
+seaborn>=0.12.0
+
+# Generación de reportes
+reportlab>=4.0.0
+fpdf2>=2.7.0
+
+# Utilidades
+python-dateutil>=2.8.0
