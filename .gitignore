@@ -39,14 +39,21 @@ MANIFEST
 .DS_Store
 Thumbs.db
 
-# TensorFlow / Keras
+# Historical dataset (UniMiB-SHAR reference data - NOT needed for personal training)
+# Total size: ~260 MB (33MB acc_data + 33MB two_classes_data + 28MB full_data +
+#                       22MB adl_data + 11MB fall_data + 132MB splits)
+data/UniMiB-SHAR/
+
+# MAT files (MATLAB data format - not needed for TensorFlow/Keras)
+*.mat
+
+# TensorFlow / Keras model files (generated during training)
 .keras/
 *.h5
 *.hdf5
 *.pb
-
-# Results from old experiments (not needed for training)
-data/UniMiB-SHAR/data/results/
+*.ckpt*
+*.pth
 
 # Model checkpoints and weights (will be generated during training)
 models/
@@ -60,13 +67,19 @@ logs/
 runs/
 *.log
 .wandb/
+tensorboard_logs/
+
+# Large data files (keep only your custom data)
+*.csv
+*.xlsx
+*.json
 
 # Temporary files
 *.tmp
 *.temp
 *.bak
 
-# Environment variables
+# Environment variables (NEVER commit these)
 .env
 .env.local
 .env.*.local
@@ -80,10 +93,9 @@ runs/
 ehthumbs.db
 Thumbs.db
 
-# IMPORTANT: Keep training data
-# DO NOT ignore these files, they are required for training:
-# - data/UniMiB-SHAR/data/*_data.mat
-# - data/UniMiB-SHAR/data/*_labels.mat
-# - data/UniMiB-SHAR/data/*_names.mat
-# - data/UniMiB-SHAR/data/split/
-# - data/UniMiB-SHAR/code/
+# Keep in repository:
+# ✓ Your TensorFlow/Keras Python code
+# ✓ requirements.txt (dependencies)
+# ✓ README.md (documentation)
+# ✓ Your custom training data in data/raw/ or data/custom/
+# ✓ Configuration files (config.yaml, etc.)
