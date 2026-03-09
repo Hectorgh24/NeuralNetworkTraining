@@ -225,13 +225,13 @@ def construir_modelo(input_shape, num_clases):
     ])
 
     # Compilación del modelo
+    # Nota: Removemos Precision y Recall genéricas por compatibilidad con Keras 3.x
+    # Las métricas se calculan en evaluación post-entrenamiento
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
         loss='sparse_categorical_crossentropy',
         metrics=[
-            keras.metrics.SparseCategoricalAccuracy(name='accuracy'),
-            keras.metrics.Precision(name='precision'),
-            keras.metrics.Recall(name='recall')
+            keras.metrics.SparseCategoricalAccuracy(name='accuracy')
         ]
     )
 
