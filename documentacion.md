@@ -5,7 +5,7 @@ Este documento describe de forma secuencial el pipeline del proyecto, las decisi
 ## 1) Datos de origen y conversión a NPZ
 - **Origen**: archivos `.mat` (formato MATLAB) del dataset UniMiB-SHAR (acelerómetro).
 - **Conversión**: scripts auxiliares (`convert_mat_to_npz.py`, `convert_to_float32.py`) transformaron los `.mat` a `.npz` (formato comprimido de NumPy) para acelerar carga y reducir dependencias.
-- **Ubicación final**: `data/raw/` contiene `acc_data.npz`, `acc_labels.npz`, `acc_names.npz`, y equivalentes para `adl`, `fall`, `two_classes`, etc.
+- **Ubicación final**: `data/raw_float32/` contiene `acc_data.npz`, `acc_labels.npz`, `acc_names.npz`, y equivalentes para `adl`, `fall`, `two_classes`, etc.
 - **Conceptos claves**:
   - **NPZ**: contenedor zip de arrays NumPy; rápido de cargar con `np.load`.
   - **Etiquetas**: en `*_labels.npz` suelen venir como enteros (id de actividad) o one-hot; se normalizan más adelante.

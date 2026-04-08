@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 # Usar Path para compatibilidad con Windows
-raw_dir = Path(r"C:\Develop\TensorFlow\data\raw")
+raw_dir = Path(r"C:\Develop\TensorFlow\data\raw_float32")
 
 print("=" * 70)
 print("Convirtiendo archivos MAT a NPZ (sin borrar originales)")

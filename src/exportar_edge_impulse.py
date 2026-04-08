@@ -53,7 +53,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path("data/raw"),
+        default=Path("data/raw_float32"),
         help="Directorio que contiene acc_data.npz y acc_labels.npz.",
     )
     parser.add_argument(

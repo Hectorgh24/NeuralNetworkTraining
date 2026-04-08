@@ -6,7 +6,7 @@ print("Converting NPZ files from float64 to float32")
 print("=" * 70)
 
 original_dir = Path(r"C:\Develop\TensorFlow\data\raw_float64_original")
-output_dir = Path(r"C:\Develop\TensorFlow\data\raw")
+output_dir = Path(r"C:\Develop\TensorFlow\data\raw_float32")
 
 npz_files = sorted(original_dir.glob("*.npz"))
 
@@ -62,5 +62,5 @@ print(f"Space saved:                 {total_original - total_compressed:.1f} MB"
 print(f"Reduction rate:              {((total_original - total_compressed) / total_original * 100):.1f}%")
 
 print("\n[INFO] Original float64 files preserved in: data/raw_float64_original/")
-print("[INFO] New float32 files created in: data/raw/")
+print("[INFO] New float32 files created in: data/raw_float32/")
 print("=" * 70)

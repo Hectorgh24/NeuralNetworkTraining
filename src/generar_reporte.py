@@ -204,7 +204,13 @@ def cargar_predicciones(dataset_name):
 
 def graficar_matriz_confusion(cm, nombres_clases, dataset_name):
     """
-    Genera y guarda gráfico de matriz de confusión.
+    Genera y guarda gráfico de matriz de confusión mejorado.
+    
+    Mejoras:
+    - Figsize aumentado para mejor legibilidad de matrices grandes (17 clases)
+    - Tamaño de fuente ajustado para anotaciones claras
+    - Rotación de etiquetas de ejes para evitar solapamiento
+    - Optimizado para matrices de cualquier tamaño
 
     Args:
         cm (np.ndarray): Matriz de confusión
@@ -215,8 +221,25 @@ def graficar_matriz_confusion(cm, nombres_clases, dataset_name):
         str: Ruta del archivo guardado
     """
     num_clases = max(1, len(nombres_clases))
-    fig, axes = plt.subplots(1, 2, figsize=(16, 7))
-    mostrar_anotaciones = num_clases <= 12
+    
+    # Figsize dinámico: matrices grandes requieren más espacio
+    if num_clases > 12:
+        figsize = (18, 14)  # Aumentado para 17 clases
+    elif num_clases > 8:
+        figsize = (14, 10)  # Aumentado para 9 clases
+    else:
+        figsize = (12, 8)
+    
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+    mostrar_anotaciones = num_clases <= 17  # Ahora soporta hasta 17 clases
+
+    # Tamaño de fuente dinámico
+    if num_clases > 15:
+        annot_fontsize = 7
+    elif num_clases > 10:
+        annot_fontsize = 8
+    else:
+        annot_fontsize = 10
 
     # Matriz en conteos absolutos
     sns.heatmap(
@@ -227,12 +250,25 @@ def graficar_matriz_confusion(cm, nombres_clases, dataset_name):
         xticklabels=nombres_clases,
         yticklabels=nombres_clases,
         cbar_kws={'label': 'Conteo'},
-        annot_kws={'size': 8},
+        annot_kws={'size': annot_fontsize},
         ax=axes[0]
     )
-    axes[0].set_title('Matriz de confusión (conteos)', fontsize=12, fontweight='bold')
-    axes[0].set_xlabel('Predicción')
-    axes[0].set_ylabel('Etiqueta real')
+    axes[0].set_title('Matriz de confusión (conteos absolutos)', fontsize=13, fontweight='bold')
+    axes[0].set_xlabel('Predicción', fontsize=11)
+    axes[0].set_ylabel('Etiqueta real', fontsize=11)
+    
+    # Rotación mejorada de etiquetas
+    axes[0].set_xticklabels(
+        axes[0].get_xticklabels(),
+        rotation=45,
+        ha='right',
+        fontsize=8 if num_clases > 10 else 9
+    )
+    axes[0].set_yticklabels(
+        axes[0].get_yticklabels(),
+        rotation=0,
+        fontsize=8 if num_clases > 10 else 9
+    )
 
     # Matriz normalizada por fila (recall por clase)
     cm_f = cm.astype(np.float32)
@@ -248,23 +284,28 @@ def graficar_matriz_confusion(cm, nombres_clases, dataset_name):
         yticklabels=nombres_clases,
         vmin=0.0,
         vmax=1.0,
-        cbar_kws={'label': 'Proporción'},
-        annot_kws={'size': 8},
+        cbar_kws={'label': 'Proporción (Recall)'},
+        annot_kws={'size': annot_fontsize},
         ax=axes[1]
     )
-    axes[1].set_title('Matriz de confusión (normalizada)', fontsize=12, fontweight='bold')
-    axes[1].set_xlabel('Predicción')
-    axes[1].set_ylabel('Etiqueta real')
+    axes[1].set_title('Matriz de confusión (normalizada por fila)', fontsize=13, fontweight='bold')
+    axes[1].set_xlabel('Predicción', fontsize=11)
+    axes[1].set_ylabel('Etiqueta real', fontsize=11)
+    
+    # Rotación mejorada de etiquetas
+    axes[1].set_xticklabels(
+        axes[1].get_xticklabels(),
+        rotation=45,
+        ha='right',
+        fontsize=8 if num_clases > 10 else 9
+    )
+    axes[1].set_yticklabels(
+        axes[1].get_yticklabels(),
+        rotation=0,
+        fontsize=8 if num_clases > 10 else 9
+    )
 
-    for ax in axes:
-        if num_clases <= 10:
-            ax.tick_params(axis='x', labelrotation=30, labelsize=8)
-            ax.tick_params(axis='y', labelrotation=0, labelsize=8)
-        else:
-            ax.tick_params(axis='x', labelrotation=90, labelsize=7)
-            ax.tick_params(axis='y', labelrotation=0, labelsize=7)
-
-    fig.suptitle(f'Matriz de Confusión - {dataset_name.upper()}', fontsize=14, fontweight='bold')
+    fig.suptitle(f'Matriz de Confusión - {dataset_name.upper()}', fontsize=15, fontweight='bold')
     plt.tight_layout()
 
     base = _nombre_base_modelo(dataset_name)
@@ -272,7 +313,7 @@ def graficar_matriz_confusion(cm, nombres_clases, dataset_name):
     plt.savefig(ruta_grafico, dpi=300, bbox_inches='tight')
     plt.close()
 
-    print(f"✓ Matriz de confusión guardada: {ruta_grafico}")
+    print(f"✓ Matriz de confusión mejorada guardada: {ruta_grafico}")
     return ruta_grafico
 
 
@@ -727,6 +768,67 @@ def crear_tabla_arquitectura_modelo(metricas):
     return tabla
 
 
+def extraer_resumen_metricas(metricas):
+    """
+    Extrae un resumen de las mejores y peores clases según F1-score y las formatea
+    para insertar en el PDF como texto enriquecido.
+    
+    Args:
+        metricas (dict): Diccionario con métricas que incluye classification_report_dict
+        
+    Returns:
+        str: HTML formateado para reportlab Paragraph
+    """
+    reporte_dict = metricas.get('classification_report_dict', {})
+    clases = metricas.get('clases', [])
+    
+    # Extraer F1-scores por clase
+    f1_scores = []
+    for clase in clases:
+        fila = reporte_dict.get(clase, {})
+        if isinstance(fila, dict) and 'f1-score' in fila:
+            f1_scores.append({
+                'clase': clase,
+                'f1': float(fila.get('f1-score', 0.0)),
+                'precision': float(fila.get('precision', 0.0)),
+                'recall': float(fila.get('recall', 0.0))
+            })
+    
+    if not f1_scores:
+        return "<i>No hay datos de F1-score disponibles</i>"
+    
+    # Ordenar por F1-score (descendente)
+    f1_scores_sorted = sorted(f1_scores, key=lambda x: x['f1'], reverse=True)
+    
+    # Obtener top 3 y bottom 3
+    top_3 = f1_scores_sorted[:3]
+    bottom_3 = f1_scores_sorted[-3:] if len(f1_scores_sorted) >= 3 else f1_scores_sorted
+    
+    # Accuracy global
+    accuracy = metricas.get('accuracy', 0.0)
+    
+    # Construir HTML para reportlab
+    html_text = f"""
+    <b>Análisis de Desempeño por Clase</b><br/>
+    <br/>
+    <b>Precisión Global:</b> {accuracy:.1%}<br/>
+    <br/>
+    <b style="color:#2ca02c">Clases con Mejor Desempeño (Top 3):</b><br/>
+    """
+    
+    for i, item in enumerate(top_3, 1):
+        html_text += f"<font color='#2ca02c'>• {item['clase']}: F1={item['f1']:.3f} (Precisión={item['precision']:.3f}, Recall={item['recall']:.3f})</font><br/>"
+    
+    html_text += f"""<br/>
+    <b style="color:#d62728">Clases que Requieren Mejora (Bottom 3):</b><br/>
+    """
+    
+    for i, item in enumerate(bottom_3, 1):
+        html_text += f"<font color='#d62728'>• {item['clase']}: F1={item['f1']:.3f} (Precisión={item['precision']:.3f}, Recall={item['recall']:.3f})</font><br/>"
+    
+    return html_text
+
+
 def generar_pdf(dataset_name):
     """
     Genera reporte completo en PDF.
@@ -816,6 +918,10 @@ def generar_pdf(dataset_name):
         contenido.append(Paragraph("MATRICES DE CONFUSIÓN", subtitulo_style))
         if ruta_matriz.exists():
             contenido.append(Image(str(ruta_matriz), width=6.5*inch, height=5.5*inch))
+            contenido.append(Spacer(1, 0.15*inch))
+            # Agregar resumen de métricas por clase
+            resumen_html = extraer_resumen_metricas(metricas)
+            contenido.append(Paragraph(resumen_html, normal_style))
         contenido.append(PageBreak())
 
         # Página 4: Métricas por clase

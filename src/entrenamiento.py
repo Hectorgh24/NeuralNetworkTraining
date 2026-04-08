@@ -36,7 +36,7 @@ if hasattr(sys.stdout, "reconfigure"):
 # ============================================================================
 
 # Rutas
-DATA_DIR = Path(r"C:\Develop\TensorFlow\data\raw")
+DATA_DIR = Path(r"C:\Develop\TensorFlow\data\raw_float32")
 MODELS_DIR = Path(r"C:\Develop\TensorFlow\models")
 LOGS_DIR = Path(r"C:\Develop\TensorFlow\logs")
 

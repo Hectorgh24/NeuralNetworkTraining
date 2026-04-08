@@ -55,7 +55,7 @@ Thumbs.db
 # ============================================================================
 
 # Complete data directory
-# Preserve locally: data/raw/, data/raw_float64_original/, data/processed/
+# Preserve locally: data/raw_float32/, data/raw_float64_original/, data/processed/
 # Users must generate these locally from source datasets using conversion scripts
 data/
 
@@ -141,7 +141,7 @@ tensorboard_logs/
 #   - config.yaml or similar (hyperparameters, settings)
 #
 # ✓ Data structure (directories only, files ignored):
-#   - data/raw/ (source datasets - .npz files generated locally)
+#   - data/raw_float32/ (source datasets - .npz files generated locally)
 #   - data/processed/ (processed datasets - generated locally)
 #   - data/raw_float64_original/ (backup datasets - generated locally)
 #

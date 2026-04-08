@@ -1,5 +1,5 @@
 flowchart TD
-    A[Inicio] --> B[Configurar entorno<br/>DATASET_NAME=two_classes<br/>Rutas: data/raw, models, logs]
+    A[Inicio] --> B[Configurar entorno<br/>DATASET_NAME=two_classes<br/>Rutas: data/raw_float32, models, logs]
     B --> C[Cargar ACC (acc_data.npz, acc_labels.npz)<br/>y extraer etiquetas columna 0]
     C --> D[Filtrar muestras con ids {3,10,11,12,13,14,15,16,17}]
     D --> E[Remapear ids originales → índices 0..8<br/>(0:walking, 1-8:falling_* especificadas)]

@@ -29,7 +29,7 @@ else:
 # 3. Cargar datos
 print("\n[3/5] Cargando datos de ejemplo...")
 try:
-    data_dir = Path(r"C:\Develop\TensorFlow\data\raw")
+    data_dir = Path(r"C:\Develop\TensorFlow\data\raw_float32")
     acc_data = np.load(data_dir / 'acc_data.npz', allow_pickle=True)['acc_data']
     acc_labels = np.load(data_dir / 'acc_labels.npz', allow_pickle=True)['acc_labels']
     print(f"✓ Datos cargados exitosamente")
