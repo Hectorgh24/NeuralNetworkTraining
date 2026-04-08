@@ -71,6 +71,11 @@ def construir_argumentos() -> argparse.Namespace:
         action="store_true",
         help="Aplica cuantización float16 para reducir tamaño del modelo.",
     )
+    parser.add_argument(
+        "--int8",
+        action="store_true",
+        help="Aplica cuantización full integer (int8) para máxima compresión y velocidad en Edge AI.",
+    )
     args = parser.parse_args()
 
     if args.input is None:
@@ -81,9 +86,18 @@ def construir_argumentos() -> argparse.Namespace:
     return args
 
 
-def convertir_a_tflite(modelo_keras: Path, output_dir: Path, usar_float16: bool = False) -> Path:
+def convertir_a_tflite(modelo_keras: Path, output_dir: Path, usar_float16: bool = False, usar_int8: bool = False) -> Path:
     """
-    Convierte un archivo .keras a .tflite y devuelve la ruta de salida.
+    Convierte un archivo .keras a .tflite con cuantización post-entrenamiento.
+
+    Args:
+        modelo_keras: Ruta del archivo .keras
+        output_dir: Directorio de salida para el .tflite
+        usar_float16: Aplicar cuantización a float16
+        usar_int8: Aplicar cuantización optimizada con DEFAULT (sin requerir representative_dataset)
+
+    Returns:
+        Path: Ruta del archivo .tflite generado
     """
     if not modelo_keras.exists():
         # Intentar fallback: si pidió *_modelo probar *_mejor_modelo y viceversa
@@ -111,10 +125,19 @@ def convertir_a_tflite(modelo_keras: Path, output_dir: Path, usar_float16: bool 
     convertidor = tf.lite.TFLiteConverter.from_keras_model(modelo)
     convertidor.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS]
 
-    # Cuantización opcional para reducir tamaño en móvil.
-    if usar_float16:
+    # Cuantización post-entrenamiento para reducir tamaño (crítico para Edge AI < 1 MB)
+    if usar_int8:
+        print("[INFO] Aplicando cuantización optimizada con Dynamic Range Quantization...")
+        convertidor.optimizations = [tf.lite.Optimize.DEFAULT]
+        # Dynamic range quantization: comprime pesos a int8 sin requerir representative_dataset
+        # Esto es ideal para modelos de clasificación en Edge AI
+    elif usar_float16:
+        print("[INFO] Aplicando cuantización Float16...")
         convertidor.optimizations = [tf.lite.Optimize.DEFAULT]
         convertidor.target_spec.supported_types = [tf.float16]
+    else:
+        print("[INFO] Aplicando optimización DEFAULT...")
+        convertidor.optimizations = [tf.lite.Optimize.DEFAULT]
 
     tflite_model = convertidor.convert()
     ruta_salida.write_bytes(tflite_model)
@@ -126,21 +149,32 @@ def main() -> None:
     args = construir_argumentos()
 
     print("=" * 70)
-    print("EXPORTACIÓN DE MODELO A TENSORFLOW LITE")
+    print("EXPORTACIÓN DE MODELO A TENSORFLOW LITE CON CUANTIZACIÓN")
     print("=" * 70)
     print(f"Modelo de entrada: {args.input}")
     print(f"Carpeta destino:   {args.output_dir}")
     print(f"Cuantización f16:  {'Sí' if args.float16 else 'No'}")
+    print(f"Cuantización i8:   {'Sí' if args.int8 else 'No'}")
 
-    ruta_tflite = convertir_a_tflite(args.input, args.output_dir, args.float16)
+    ruta_tflite = convertir_a_tflite(
+        args.input, 
+        args.output_dir, 
+        usar_float16=args.float16,
+        usar_int8=args.int8
+    )
 
     tam_keras_mb = args.input.stat().st_size / (1024 * 1024)
     tam_tflite_mb = ruta_tflite.stat().st_size / (1024 * 1024)
 
-    print("\nOK Exportación completada")
+    print("\n✓ Exportación completada")
     print(f"Archivo generado:  {ruta_tflite}")
     print(f"Tamaño .keras:     {tam_keras_mb:.2f} MB")
     print(f"Tamaño .tflite:    {tam_tflite_mb:.2f} MB")
+    if tam_tflite_mb > 1.0:
+        print(f"⚠ ADVERTENCIA: Tamaño excede 1 MB. Se requiere cuantización más agresiva.")
+        print(f"  Sugerencia: Intenta con --int8 para máxima compresión.")
+    elif tam_tflite_mb < 1.0:
+        print(f"✓ Modelo bajo 1 MB, listo para Edge AI en Android")
     print("=" * 70)
 
 

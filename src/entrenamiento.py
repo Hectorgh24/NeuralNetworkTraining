@@ -13,6 +13,7 @@ from tensorflow import keras
 from tensorflow.keras import layers, models, callbacks
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.utils.class_weight import compute_class_weight
 from sklearn.metrics import (
     classification_report, confusion_matrix, accuracy_score,
     precision_score, recall_score, f1_score
@@ -349,67 +350,87 @@ def dividir_datos(X, y, test_size=0.2, val_size=0.2, random_state=42):
 
 def construir_modelo(input_shape, num_clases):
     """
-    Construye la arquitectura de la red neuronal profunda con regularización.
+    Construye un modelo Convolucional 1D optimizado para Edge AI.
 
     Arquitectura:
-    - Capas densas progresivas con regularización L2
-    - Activación ReLU en capas ocultas, Softmax en salida
-    - Dropout para evitar overfitting
-    - Batch Normalization para estabilidad
+    - Reshape (3, 151) → Permute (151, 3) para tensor secuencial correcto
+    - Bloques Conv1D con BatchNormalization, ReLU y MaxPooling1D
+    - GaussianNoise para regularización durante entrenamiento
+    - Focal Loss para penalizar errores en fronteras de decisión
+    - Global Average Pooling para reducir parámetros
 
     Args:
-        input_shape (int): Número de características de entrada
+        input_shape (int): Número de características de entrada (453)
         num_clases (int): Número de clases de salida
 
     Returns:
-        keras.Model: Modelo compilado
+        keras.Model: Modelo compilado con Focal Loss
     """
-    print("\n[INFO] Construyendo modelo...")
+    print("\n[INFO] Construyendo modelo Conv1D para Edge AI...")
 
     model = models.Sequential([
         # Capa de entrada
         layers.Input(shape=(input_shape,)),
 
-        # Bloque 1
-        layers.Dense(
-            256,
-            activation='relu',
+        # Reshape: (batch, 453) → (batch, 3, 151)
+        layers.Reshape((3, 151), name='reshape_input'),
+
+        # Permute: (batch, 3, 151) → (batch, 151, 3)
+        # Esto ordena los datos secuencialmente para Conv1D: (samples, timesteps, channels)
+        layers.Permute((2, 1), name='permute_to_conv'),
+
+        # Data Augmentation: Inyectar ruido Gaussiano solo durante entrenamiento
+        layers.GaussianNoise(stddev=0.01, name='gaussian_noise'),
+
+        # Bloque Conv1D 1
+        layers.Conv1D(
+            filters=64,
+            kernel_size=3,
+            padding='same',
             kernel_regularizer=keras.regularizers.l2(0.001),
-            name='dense_1'
+            name='conv1d_1'
         ),
         layers.BatchNormalization(name='bn_1'),
-        layers.Dropout(0.3, name='dropout_1'),
+        layers.Activation('relu', name='relu_1'),
+        layers.MaxPooling1D(pool_size=2, name='maxpool_1'),
 
-        # Bloque 2
+        # Bloque Conv1D 2
+        layers.Conv1D(
+            filters=128,
+            kernel_size=3,
+            padding='same',
+            kernel_regularizer=keras.regularizers.l2(0.001),
+            name='conv1d_2'
+        ),
+        layers.BatchNormalization(name='bn_2'),
+        layers.Activation('relu', name='relu_2'),
+        layers.MaxPooling1D(pool_size=2, name='maxpool_2'),
+
+        # Bloque Conv1D 3
+        layers.Conv1D(
+            filters=256,
+            kernel_size=3,
+            padding='same',
+            kernel_regularizer=keras.regularizers.l2(0.001),
+            name='conv1d_3'
+        ),
+        layers.BatchNormalization(name='bn_3'),
+        layers.Activation('relu', name='relu_3'),
+        layers.MaxPooling1D(pool_size=2, name='maxpool_3'),
+
+        # Global Average Pooling para reducir parámetros (crítico para Edge AI)
+        layers.GlobalAveragePooling1D(name='global_avg_pool'),
+
+        # Capa fully connected final
         layers.Dense(
             128,
             activation='relu',
             kernel_regularizer=keras.regularizers.l2(0.001),
-            name='dense_2'
+            name='dense_final'
         ),
-        layers.BatchNormalization(name='bn_2'),
-        layers.Dropout(0.3, name='dropout_2'),
+        layers.Dropout(0.3, name='dropout_final'),
 
-        # Bloque 3
-        layers.Dense(
-            64,
-            activation='relu',
-            kernel_regularizer=keras.regularizers.l2(0.001),
-            name='dense_3'
-        ),
-        layers.BatchNormalization(name='bn_3'),
-        layers.Dropout(0.2, name='dropout_3'),
-
-        # Bloque 4
-        layers.Dense(
-            32,
-            activation='relu',
-            kernel_regularizer=keras.regularizers.l2(0.001),
-            name='dense_4'
-        ),
-        layers.Dropout(0.2, name='dropout_4'),
-
-        # Capa de salida
+        # Capa de salida con One-Hot Encoding (Softmax)
         layers.Dense(
             num_clases,
             activation='softmax',
@@ -417,22 +438,67 @@ def construir_modelo(input_shape, num_clases):
         )
     ])
 
-    # Compilación del modelo
-    # Nota: Removemos Precision y Recall genéricas por compatibilidad con Keras 3.x
-    # Las métricas se calculan en evaluación post-entrenamiento
+    # Compilación con Focal Loss para penalizar errores en fronteras complejas
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
-        loss='sparse_categorical_crossentropy',
+        loss=keras.losses.CategoricalFocalCrossentropy(
+            alpha=0.25,
+            gamma=2.0,
+            from_logits=False,
+            label_smoothing=0.1
+        ),
         metrics=[
-            keras.metrics.SparseCategoricalAccuracy(name='accuracy')
+            keras.metrics.CategoricalAccuracy(name='accuracy')
         ]
     )
 
-    print("✓ Modelo construido exitosamente")
+    print("✓ Modelo Conv1D construido exitosamente")
     print("\nArquitectura del modelo:")
     model.summary()
 
     return model
+
+
+# ============================================================================
+# CALLBACK PERSONALIZADO: F1-Score Macro
+# ============================================================================
+
+class MacroF1Score(keras.callbacks.Callback):
+    """
+    Callback que calcula Macro F1-Score en cada época de validación.
+    Permite usar F1-Score como métrica de checkpoint robusto al desbalanceo.
+    """
+    def __init__(self, X_val, y_val, verbose=1, restore_best=True):
+        super().__init__()
+        self.X_val = X_val
+        self.y_val = y_val
+        self.verbose = verbose
+        self.restore_best = restore_best
+        self.best_f1 = -np.inf
+        self.best_weights = None
+        self.best_epoch = 0
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        
+        # Predicciones en validación
+        y_pred_probs = self.model.predict(self.X_val, verbose=0)
+        y_pred = np.argmax(y_pred_probs, axis=1)
+        y_true = np.argmax(self.y_val, axis=1) if len(self.y_val.shape) > 1 else self.y_val
+        
+        # Calcular Macro F1-Score
+        macro_f1 = f1_score(y_true, y_pred, average='macro', zero_division=0)
+        logs['val_macro_f1'] = macro_f1
+        
+        if self.verbose > 0:
+            print(f" - val_macro_f1: {macro_f1:.4f}", end='')
+        
+        # Guardar mejor modelo por F1-Score
+        if macro_f1 > self.best_f1:
+            self.best_f1 = macro_f1
+            self.best_epoch = epoch
+            if self.restore_best:
+                self.best_weights = [w.numpy().copy() for w in self.model.weights]
 
 
 # ============================================================================
@@ -444,21 +510,41 @@ def entrenar_modelo(model, X_train, y_train, X_val, y_val, epochs=100):
     Entrena el modelo con callbacks para mejorar el rendimiento.
 
     Callbacks utilizados:
+    - MacroF1Score: Monitorea F1-Score robusto al desbalanceo
     - EarlyStopping: Detiene el entrenamiento si no hay mejoría
     - ReduceLROnPlateau: Reduce learning rate si se estanca
-    - ModelCheckpoint: Guarda el mejor modelo
+    - ModelCheckpoint: Guarda el mejor modelo por val_loss
     - TensorBoard: Monitoreo en tiempo real
 
     Args:
         model: Modelo de Keras
-        X_train, y_train: Datos de entrenamiento
-        X_val, y_val: Datos de validación
+        X_train, y_train: Datos de entrenamiento (y_train será convertido a One-Hot)
+        X_val, y_val: Datos de validación (y_val será convertido a One-Hot)
         epochs: Número máximo de épocas
 
     Returns:
         keras.callbacks.History: Historial de entrenamiento
     """
     print("\n[INFO] Iniciando entrenamiento...")
+
+    # Convertir etiquetas a One-Hot para trabajar con CategoricalFocalCrossentropy
+    # En este punto, y_train e y_val son enteros (0..num_clases-1)
+    num_clases = model.output_shape[-1]
+    y_train_onehot = tf.keras.utils.to_categorical(y_train, num_classes=num_clases)
+    y_val_onehot = tf.keras.utils.to_categorical(y_val, num_classes=num_clases)
+
+    # Calcular pesos de clase para balanceo dinámico
+    # Usar y_train original (enteros) antes del one-hot
+    class_weights = compute_class_weight(
+        class_weight='balanced',
+        classes=np.unique(y_train),
+        y=y_train
+    )
+    class_weight_dict = {i: w for i, w in enumerate(class_weights)}
+    
+    print(f"✓ Pesos de clase calculados (balanceo dinámico):")
+    for cls_idx, weight in class_weight_dict.items():
+        print(f"  Clase {cls_idx}: {weight:.4f}")
 
     # Callbacks
     early_stopping = callbacks.EarlyStopping(
@@ -476,11 +562,20 @@ def entrenar_modelo(model, X_train, y_train, X_val, y_val, epochs=100):
         verbose=1
     )
 
+    # Checkpoint monitoreando val_loss (ya que usamos Focal Loss)
     model_checkpoint = callbacks.ModelCheckpoint(
         filepath=MODELS_DIR / f"{_nombre_base_modelo(DATASET_NAME)}_mejor_modelo.keras",
-        monitor='val_accuracy',
+        monitor='val_loss',
         save_best_only=True,
         verbose=1
+    )
+
+    # Callback personalizado para monitorear Macro F1-Score
+    macro_f1_callback = MacroF1Score(
+        X_val=X_val,
+        y_val=y_val_onehot,
+        verbose=1,
+        restore_best=False
     )
 
     tensorboard = callbacks.TensorBoard(
@@ -489,13 +584,14 @@ def entrenar_modelo(model, X_train, y_train, X_val, y_val, epochs=100):
         write_graph=True
     )
 
-    # Entrenamiento
+    # Entrenamiento con class_weight para balanceo
     history = model.fit(
-        X_train, y_train,
-        validation_data=(X_val, y_val),
+        X_train, y_train_onehot,
+        validation_data=(X_val, y_val_onehot),
         epochs=epochs,
         batch_size=BATCH_SIZE,
-        callbacks=[early_stopping, reduce_lr, model_checkpoint, tensorboard],
+        class_weight=class_weight_dict,
+        callbacks=[early_stopping, reduce_lr, model_checkpoint, macro_f1_callback, tensorboard],
         verbose=1
     )
 
@@ -514,11 +610,12 @@ def evaluar_modelo(model, X_test, y_test, nombres_clases):
     Métricas calculadas:
     - Precisión general (Accuracy)
     - Precisión, Recall y F1-Score por clase
+    - Macro F1-Score (robusto al desbalanceo)
     - Matriz de confusión
 
     Args:
         model: Modelo entrenado
-        X_test, y_test: Datos de prueba
+        X_test, y_test: Datos de prueba (y_test puede ser enteros o One-Hot)
         nombres_clases: Nombres de las clases
 
     Returns:
@@ -529,7 +626,12 @@ def evaluar_modelo(model, X_test, y_test, nombres_clases):
     # Predicciones
     y_pred_probs = model.predict(X_test, verbose=0)
     y_pred = np.argmax(y_pred_probs, axis=1).reshape(-1)
-    y_test = np.asarray(y_test).reshape(-1)
+    
+    # Convertir y_test a formato entero si está en One-Hot
+    if len(y_test.shape) > 1:
+        y_test_class = np.argmax(y_test, axis=1).reshape(-1)
+    else:
+        y_test_class = np.asarray(y_test).reshape(-1)
 
     # Usar todas las clases conocidas, no solo las presentes en test/predicción
     nombres_clases = _normalizar_nombres_clases(nombres_clases)
@@ -540,32 +642,34 @@ def evaluar_modelo(model, X_test, y_test, nombres_clases):
     ]
 
     # Métricas generales
-    accuracy = accuracy_score(y_test, y_pred)
-    precision = precision_score(y_test, y_pred, average='weighted', zero_division=0)
-    recall = recall_score(y_test, y_pred, average='weighted', zero_division=0)
-    f1 = f1_score(y_test, y_pred, average='weighted', zero_division=0)
+    accuracy = accuracy_score(y_test_class, y_pred)
+    precision = precision_score(y_test_class, y_pred, average='weighted', zero_division=0)
+    recall = recall_score(y_test_class, y_pred, average='weighted', zero_division=0)
+    f1 = f1_score(y_test_class, y_pred, average='weighted', zero_division=0)
+    macro_f1 = f1_score(y_test_class, y_pred, average='macro', zero_division=0)
 
     print(f"\n{'='*50}")
     print(f"MÉTRICAS DE EVALUACIÓN")
     print(f"{'='*50}")
-    print(f"Precisión (Accuracy): {accuracy:.4f}")
-    print(f"Precisión (Weighted): {precision:.4f}")
-    print(f"Recall (Weighted):    {recall:.4f}")
-    print(f"F1-Score (Weighted):  {f1:.4f}")
+    print(f"Precisión (Accuracy):     {accuracy:.4f}")
+    print(f"Precisión (Weighted):     {precision:.4f}")
+    print(f"Recall (Weighted):        {recall:.4f}")
+    print(f"F1-Score (Weighted):      {f1:.4f}")
+    print(f"F1-Score (Macro):         {macro_f1:.4f}")
 
     # Reporte por clase
     print(f"\n{'='*50}")
     print(f"REPORTE POR CLASE")
     print(f"{'='*50}")
     reporte_clasificacion = classification_report(
-        y_test,
+        y_test_class,
         y_pred,
         labels=labels_full,
         target_names=nombres_reporte,
         zero_division=0
     )
     reporte_clasificacion_dict = classification_report(
-        y_test,
+        y_test_class,
         y_pred,
         labels=labels_full,
         target_names=nombres_reporte,
@@ -575,7 +679,7 @@ def evaluar_modelo(model, X_test, y_test, nombres_clases):
     print(reporte_clasificacion)
 
     # Matriz de confusión
-    cm = confusion_matrix(y_test, y_pred, labels=labels_full)
+    cm = confusion_matrix(y_test_class, y_pred, labels=labels_full)
 
     # Guardar métricas
     metricas = {
@@ -583,14 +687,15 @@ def evaluar_modelo(model, X_test, y_test, nombres_clases):
         'precision': float(precision),
         'recall': float(recall),
         'f1_score': float(f1),
-        'num_muestras_test': int(len(y_test)),
+        'macro_f1_score': float(macro_f1),
+        'num_muestras_test': int(len(y_test_class)),
         'clases': nombres_reporte,  # todas las clases esperadas
-        'clases_presentes': list(np.unique(np.concatenate([y_test, y_pred])).astype(int)),
+        'clases_presentes': list(np.unique(np.concatenate([y_test_class, y_pred])).astype(int)),
         'classification_report_text': reporte_clasificacion,
         'classification_report_dict': reporte_clasificacion_dict
     }
 
-    return metricas, y_pred, y_test, cm
+    return metricas, y_pred, y_test_class, cm
 
 
 def extraer_info_modelo(model):
