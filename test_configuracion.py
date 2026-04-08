@@ -4,6 +4,10 @@ Test rápido para verificar que el entorno funciona correctamente
 import numpy as np
 import tensorflow as tf
 from pathlib import Path
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 print("=" * 70)
 print("TEST DE CONFIGURACIÓN")

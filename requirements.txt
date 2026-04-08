@@ -1,8 +1,10 @@
 # TensorFlow Neural Network Training - Dependencias
 
 # Machine Learning Framework
-tensorflow>=2.12.0
-keras>=2.12.0
+# Pin to a single TensorFlow line to avoid mixed installs (2.15/2.20 conflicts).
+tensorflow==2.20.0
+keras>=3.10.0
+protobuf>=5.28.0
 
 # Ciencia de datos y análisis
 numpy>=1.23.0

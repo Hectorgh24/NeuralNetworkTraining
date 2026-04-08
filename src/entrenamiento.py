@@ -22,6 +22,13 @@ import seaborn as sns
 from pathlib import Path
 import json
 import os
+import sys
+import io
+import numbers
+
+# Evita fallos de impresión en consolas Windows con codificación cp1252.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 # ============================================================================
 # CONFIGURACIÓN
@@ -37,7 +44,10 @@ MODELS_DIR.mkdir(exist_ok=True)
 LOGS_DIR.mkdir(exist_ok=True)
 
 # Hiperparámetros
-DATASET_NAME = 'acc'  # 'acc', 'adl', 'fall', 'two_classes'
+DATASET_NAME_RAW = os.getenv(
+    "DATASET_NAME",
+    "adl_fall_multiclass"
+).strip()
 TEST_SIZE = 0.2
 VALIDATION_SIZE = 0.2
 RANDOM_STATE = 42
@@ -45,16 +55,174 @@ BATCH_SIZE = 32
 EPOCHS = 100
 LEARNING_RATE = 0.001
 
+# IDs originales (dataset ACC) que se deben conservar para el nuevo entrenamiento
+FALL_IDS_ORIGINALES = [10, 11, 12, 13, 14, 15, 16, 17]
+WALKING_ID_ORIGINAL = 3
+FALL_WALK_IDS = [WALKING_ID_ORIGINAL] + FALL_IDS_ORIGINALES
+MODEL_BASE_BY_DATASET = {
+    "two_classes": "entrenamiento_9_clases",
+    "entrenamiento_9_clases": "entrenamiento_9_clases",
+    "9_clases": "entrenamiento_9_clases",
+    "adl_fall_multiclass": "entrenamiento_17_clases",
+    "entrenamiento_17_clases": "entrenamiento_17_clases",
+    "17_clases": "entrenamiento_17_clases",
+    "acc": "entrenamiento_17_clases",
+}
+
 # ============================================================================
 # CARGA DE DATOS
 # ============================================================================
+
+def _normalizar_nombres_clases(nombres_clases):
+    """
+    Convierte nombres de clase a una lista plana de strings.
+    """
+    nombres_clases = np.asarray(nombres_clases, dtype=object).reshape(-1)
+    return [
+        str(c.item()) if isinstance(c, np.ndarray) and c.size == 1 else str(c)
+        for c in nombres_clases
+    ]
+
+
+def _cargar_nombres_acc_originales():
+    """
+    Lee los nombres originales (17 clases) desde acc_names.npz.
+    """
+    try:
+        names_file = DATA_DIR / "acc_names.npz"
+        nombres_raw = np.load(names_file, allow_pickle=True)["acc_names"]
+        nombres = _normalizar_nombres_clases(nombres_raw)
+        # El archivo trae dos filas (nombre largo y corto); nos quedamos con los 17 primeros.
+        if len(nombres) >= 17:
+            nombres = nombres[:17]
+        return nombres
+    except Exception as exc:
+        print(f"⚠ No se pudieron leer nombres originales de ACC: {exc}")
+        return []
+
+
+ACC_NOMBRES_ORIGINALES = _cargar_nombres_acc_originales()
+
+
+def _nombre_por_id_acc(idx):
+    """
+    Devuelve el nombre original asociado a un id (1..17) del dataset ACC.
+    """
+    if 1 <= idx <= len(ACC_NOMBRES_ORIGINALES):
+        return ACC_NOMBRES_ORIGINALES[idx - 1]
+    return f"clase_{idx}"
+
+
+# Mapeo dinámico id original -> índice nuevo 0..N
+ACC_ID_TO_NEW = {orig_id: idx for idx, orig_id in enumerate(FALL_WALK_IDS)}
+TWO_CLASSES_NOMBRES = [_nombre_por_id_acc(i) for i in FALL_WALK_IDS]
+TWO_CLASSES_DETALLE = [
+    {
+        "clase": _nombre_por_id_acc(orig_id),
+        "ids_originales": [orig_id],
+        "etiquetas_originales": [_nombre_por_id_acc(orig_id)]
+    }
+    for orig_id in FALL_WALK_IDS
+]
+
+
+def _nombre_base_modelo(dataset_name):
+    """
+    Devuelve el prefijo de nombre a usar para archivos de modelo según dataset.
+    """
+    return MODEL_BASE_BY_DATASET.get(dataset_name, dataset_name)
+
+
+def _parse_args_cli():
+    """
+    Permite especificar dataset por argumento CLI: --dataset nombre
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--dataset", "--data", dest="dataset", default=None)
+    args, _ = parser.parse_known_args()
+    return args.dataset
+
+
+def _limpiar_modelos_antiguos(dataset_name):
+    """
+    Elimina archivos .keras legacy que usaban el nombre del dataset original.
+    Mantiene los archivos con el nuevo esquema (entrenamiento_9/17_clases).
+    """
+    legado = [
+        MODELS_DIR / f"{dataset_name}_modelo.keras",
+        MODELS_DIR / f"{dataset_name}_mejor_modelo.keras",
+    ]
+    for ruta in legado:
+        try:
+            ruta.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+def _canonical_dataset_name(nombre_raw):
+    """
+    Normaliza nombres de dataset aceptando alias más legibles.
+    """
+    aliases = {
+        "entrenamiento_9_clases": "two_classes",
+        "9_clases": "two_classes",
+        "entrenamiento9clases": "two_classes",
+        "entrenamiento_17_clases": "adl_fall_multiclass",
+        "17_clases": "adl_fall_multiclass",
+        "entrenamiento17clases": "adl_fall_multiclass",
+    }
+    return aliases.get(nombre_raw, nombre_raw)
+
+
+def _extraer_etiqueta_clase(y_raw):
+    """
+    Extrae la etiqueta de clase desde diferentes formatos.
+
+    Para UniMiB-SHAR (N,3), la clase está en la primera columna.
+    """
+    y_raw = np.asarray(y_raw)
+
+    if y_raw.ndim == 1:
+        return y_raw.astype(np.int32)
+
+    if y_raw.ndim == 2:
+        # One-hot clásico
+        if y_raw.shape[1] > 1:
+            es_binario = np.isin(y_raw, [0, 1]).all()
+            suma_uno = np.all(y_raw.sum(axis=1) == 1)
+            if es_binario and suma_uno:
+                return np.argmax(y_raw, axis=1).astype(np.int32)
+
+        # Formato UniMiB-SHAR: [activity_id, subject_id, trial_id]
+        return y_raw[:, 0].astype(np.int32)
+
+    raise ValueError(f"Formato de etiquetas no soportado: {y_raw.shape}")
+
+
+def _cargar_dataset_base(nombre_dataset):
+    """
+    Carga un dataset base desde archivos NPZ de UniMiB-SHAR.
+    """
+    data_file = DATA_DIR / f"{nombre_dataset}_data.npz"
+    labels_file = DATA_DIR / f"{nombre_dataset}_labels.npz"
+    names_file = DATA_DIR / f"{nombre_dataset}_names.npz"
+
+    X = np.load(data_file, allow_pickle=True)[f"{nombre_dataset}_data"]
+    y_raw = np.load(labels_file, allow_pickle=True)[f"{nombre_dataset}_labels"]
+    nombres_clases = np.load(names_file, allow_pickle=True)[f"{nombre_dataset}_names"]
+    nombres_clases = _normalizar_nombres_clases(nombres_clases)
+
+    return X, y_raw, nombres_clases
+
 
 def cargar_datos(nombre_dataset):
     """
     Carga datos del dataset especificado.
 
     Args:
-        nombre_dataset (str): 'acc', 'adl', 'fall' o 'two_classes'
+        nombre_dataset (str): 'adl_fall_multiclass', 'acc', 'adl', 'fall' o 'two_classes'
 
     Returns:
         tuple: (X, y, nombres_clases)
@@ -62,14 +230,43 @@ def cargar_datos(nombre_dataset):
     print(f"\n[INFO] Cargando dataset: {nombre_dataset}")
 
     try:
-        # Cargar datos
-        data_file = DATA_DIR / f"{nombre_dataset}_data.npz"
-        labels_file = DATA_DIR / f"{nombre_dataset}_labels.npz"
-        names_file = DATA_DIR / f"{nombre_dataset}_names.npz"
+        if nombre_dataset == 'adl_fall_multiclass':
+            X_adl, y_adl_raw, nombres_adl = _cargar_dataset_base('adl')
+            X_fall, y_fall_raw, nombres_fall = _cargar_dataset_base('fall')
 
-        X = np.load(data_file, allow_pickle=True)[f"{nombre_dataset}_data"]
-        y_raw = np.load(labels_file, allow_pickle=True)[f"{nombre_dataset}_labels"]
-        nombres_clases = np.load(names_file, allow_pickle=True)[f"{nombre_dataset}_names"]
+            y_adl = _extraer_etiqueta_clase(y_adl_raw)
+            y_fall = _extraer_etiqueta_clase(y_fall_raw)
+
+            # Ajustar a índices consecutivos para clasificación multiclase conjunta.
+            y_adl = y_adl - y_adl.min()
+            y_fall = y_fall - y_fall.min() + len(nombres_adl)
+
+            X = np.concatenate([X_adl, X_fall], axis=0)
+            y_raw = np.concatenate([y_adl, y_fall], axis=0)
+            nombres_clases = nombres_adl + nombres_fall
+        elif nombre_dataset == "two_classes":
+            # Construimos un dataset reducido de 9 clases (caminar + 8 caídas) a partir de ACC
+            X_acc, y_acc_raw, _ = _cargar_dataset_base('acc')
+            y_acc = _extraer_etiqueta_clase(y_acc_raw)  # ids originales 1..17
+
+            # Seleccionar solo clases objetivo
+            mascara = np.isin(y_acc, list(ACC_ID_TO_NEW.keys()))
+            X = X_acc[mascara]
+            y_filtrado = y_acc[mascara]
+
+            # Remapear ids originales a índices consecutivos 0..8
+            y_remap = np.vectorize(ACC_ID_TO_NEW.get)(y_filtrado)
+
+            # Reemplazar estructuras de salida
+            y_raw = y_remap
+            nombres_clases = TWO_CLASSES_NOMBRES
+            print(f"✓ Filtrado dataset ACC a {len(nombres_clases)} clases (caminar + caídas)")
+            print(f"  Muestras seleccionadas: {X.shape[0]}")
+            print("  Clases elegidas (id original -> nombre):")
+            for orig_id in FALL_WALK_IDS:
+                print(f"   - {orig_id:02d} → {_nombre_por_id_acc(orig_id)}")
+        else:
+            X, y_raw, nombres_clases = _cargar_dataset_base(nombre_dataset)
 
         print(f"✓ Datos cargados: {X.shape}")
         print(f"✓ Etiquetas cargadas: {y_raw.shape}")
@@ -100,12 +297,8 @@ def preprocesar_datos(X, y):
     X_normalizado = scaler.fit_transform(X)
     X_normalizado = X_normalizado.astype(np.float32)
 
-    # Convertir etiquetas a formato de clase (si es necesario)
-    if len(y.shape) == 2:
-        # Si son one-hot encoded, convertir a clase
-        y_clase = np.argmax(y, axis=1)
-    else:
-        y_clase = y.flatten()
+    # Convertir etiquetas al índice de clase correcto
+    y_clase = _extraer_etiqueta_clase(y)
 
     # Ajustar índices de clases a partir de 0
     y_clase = y_clase - 1 if y_clase.min() > 0 else y_clase
@@ -284,7 +477,7 @@ def entrenar_modelo(model, X_train, y_train, X_val, y_val, epochs=100):
     )
 
     model_checkpoint = callbacks.ModelCheckpoint(
-        filepath=MODELS_DIR / f"{DATASET_NAME}_mejor_modelo.h5",
+        filepath=MODELS_DIR / f"{_nombre_base_modelo(DATASET_NAME)}_mejor_modelo.keras",
         monitor='val_accuracy',
         save_best_only=True,
         verbose=1
@@ -335,7 +528,16 @@ def evaluar_modelo(model, X_test, y_test, nombres_clases):
 
     # Predicciones
     y_pred_probs = model.predict(X_test, verbose=0)
-    y_pred = np.argmax(y_pred_probs, axis=1)
+    y_pred = np.argmax(y_pred_probs, axis=1).reshape(-1)
+    y_test = np.asarray(y_test).reshape(-1)
+
+    # Usar todas las clases conocidas, no solo las presentes en test/predicción
+    nombres_clases = _normalizar_nombres_clases(nombres_clases)
+    labels_full = np.arange(len(nombres_clases), dtype=int)
+    nombres_reporte = [
+        nombres_clases[i] if 0 <= i < len(nombres_clases) else f"clase_{i}"
+        for i in labels_full
+    ]
 
     # Métricas generales
     accuracy = accuracy_score(y_test, y_pred)
@@ -355,10 +557,25 @@ def evaluar_modelo(model, X_test, y_test, nombres_clases):
     print(f"\n{'='*50}")
     print(f"REPORTE POR CLASE")
     print(f"{'='*50}")
-    print(classification_report(y_test, y_pred, target_names=nombres_clases, zero_division=0))
+    reporte_clasificacion = classification_report(
+        y_test,
+        y_pred,
+        labels=labels_full,
+        target_names=nombres_reporte,
+        zero_division=0
+    )
+    reporte_clasificacion_dict = classification_report(
+        y_test,
+        y_pred,
+        labels=labels_full,
+        target_names=nombres_reporte,
+        zero_division=0,
+        output_dict=True
+    )
+    print(reporte_clasificacion)
 
     # Matriz de confusión
-    cm = confusion_matrix(y_test, y_pred)
+    cm = confusion_matrix(y_test, y_pred, labels=labels_full)
 
     # Guardar métricas
     metricas = {
@@ -367,13 +584,113 @@ def evaluar_modelo(model, X_test, y_test, nombres_clases):
         'recall': float(recall),
         'f1_score': float(f1),
         'num_muestras_test': int(len(y_test)),
-        'clases': [str(c) for c in nombres_clases]
+        'clases': nombres_reporte,  # todas las clases esperadas
+        'clases_presentes': list(np.unique(np.concatenate([y_test, y_pred])).astype(int)),
+        'classification_report_text': reporte_clasificacion,
+        'classification_report_dict': reporte_clasificacion_dict
     }
 
     return metricas, y_pred, y_test, cm
 
 
-def guardar_metricas(metricas, historico, modelo_nombre):
+def extraer_info_modelo(model):
+    """
+    Extrae información técnica del modelo para reporte.
+    """
+    buffer = io.StringIO()
+    model.summary(print_fn=lambda x: buffer.write(x + "\n"))
+    resumen_texto = buffer.getvalue()
+
+    capas = []
+    for idx, layer in enumerate(model.layers, start=1):
+        salida = getattr(layer, "output_shape", None)
+        if isinstance(salida, (tuple, list)):
+            salida = str(salida)
+
+        # Intentar obtener cantidad de unidades/neuronas de la capa
+        unidades = None
+        if hasattr(layer, "units"):
+            unidades = int(getattr(layer, "units"))
+        else:
+            try:
+                # Para capas sin atributo units tomamos la última dimensión del output_shape
+                salida_shape = layer.output_shape
+                if isinstance(salida_shape, (tuple, list)) and salida_shape:
+                    last_dim = salida_shape[-1]
+                    if isinstance(last_dim, int):
+                        unidades = last_dim
+            except Exception:
+                unidades = None
+
+        # Detectar activación si aplica
+        activacion = None
+        act_attr = getattr(layer, "activation", None)
+        if act_attr:
+            try:
+                activacion = act_attr.__name__
+            except Exception:
+                activacion = str(act_attr)
+
+        capas.append({
+            "indice": idx,
+            "nombre": layer.name,
+            "tipo": layer.__class__.__name__,
+            "salida": str(salida) if salida is not None else "N/D",
+            "unidades": unidades if unidades is not None else "N/D",
+            "activacion": activacion if activacion is not None else "N/D",
+            "parametros": int(layer.count_params()),
+            "entrenable": bool(layer.trainable),
+        })
+
+    optimizer = model.optimizer
+    learning_rate = getattr(optimizer, "learning_rate", None)
+    try:
+        lr_valor = float(tf.keras.backend.get_value(learning_rate))
+    except Exception:
+        lr_valor = None
+
+    info = {
+        "tipo_modelo": model.__class__.__name__,
+        "input_shape": str(model.input_shape),
+        "output_shape": str(model.output_shape),
+        "total_capas": int(len(model.layers)),
+        "capas_ocultas_aprox": int(max(len(model.layers) - 1, 0)),
+        "capas": capas,
+        "parametros_totales": int(model.count_params()),
+        "parametros_entrenables": int(
+            np.sum([np.prod(v.shape) for v in model.trainable_weights])
+        ),
+        "parametros_no_entrenables": int(
+            np.sum([np.prod(v.shape) for v in model.non_trainable_weights])
+        ),
+        "optimizador": optimizer.__class__.__name__,
+        "learning_rate": lr_valor,
+        "loss": str(model.loss),
+        "metricas_compile": [str(m.name) for m in model.metrics],
+        "summary_texto": resumen_texto,
+    }
+    return info
+
+
+def _to_jsonable(obj):
+    """
+    Convierte recursivamente objetos numpy / TensorFlow a tipos serializables por json.
+    """
+    if isinstance(obj, (np.generic,)):
+        return obj.item()
+    if isinstance(obj, (numbers.Number, str, bool)) or obj is None:
+        return obj
+    if isinstance(obj, (list, tuple)):
+        return [_to_jsonable(x) for x in obj]
+    if isinstance(obj, dict):
+        return {str(k): _to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    # Fallback: cadena representativa
+    return str(obj)
+
+
+def guardar_metricas(metricas, historico, modelo_nombre, model):
     """
     Guarda las métricas en un archivo JSON.
 
@@ -381,6 +698,7 @@ def guardar_metricas(metricas, historico, modelo_nombre):
         metricas (dict): Diccionario con métricas
         historico: Historial de entrenamiento
         modelo_nombre (str): Nombre del modelo
+        model: Modelo Keras entrenado
     """
     metricas['historico'] = {
         'loss': [float(x) for x in historico.history['loss']],
@@ -388,10 +706,26 @@ def guardar_metricas(metricas, historico, modelo_nombre):
         'val_loss': [float(x) for x in historico.history['val_loss']],
         'val_accuracy': [float(x) for x in historico.history['val_accuracy']]
     }
+    metricas['config_entrenamiento'] = {
+        'dataset_name': DATASET_NAME,
+        'test_size': float(TEST_SIZE),
+        'validation_size': float(VALIDATION_SIZE),
+        'batch_size': int(BATCH_SIZE),
+        'epochs_max': int(EPOCHS),
+        'learning_rate_inicial': float(LEARNING_RATE),
+        'random_state': int(RANDOM_STATE),
+    }
+    metricas['modelo_info'] = extraer_info_modelo(model)
+    if DATASET_NAME == "two_classes":
+        metricas['clases_detalle'] = TWO_CLASSES_DETALLE
 
     ruta_metricas = MODELS_DIR / f"{modelo_nombre}_metricas.json"
-    with open(ruta_metricas, 'w') as f:
-        json.dump(metricas, f, indent=4)
+    ruta_temp = ruta_metricas.with_suffix(".json.tmp")
+
+    metricas_jsonable = _to_jsonable(metricas)
+    with open(ruta_temp, 'w') as f:
+        json.dump(metricas_jsonable, f, indent=4)
+    ruta_temp.replace(ruta_metricas)
 
     print(f"\n✓ Métricas guardadas en: {ruta_metricas}")
 
@@ -450,6 +784,20 @@ def main():
     print("="*70)
 
     try:
+        cli_dataset = _parse_args_cli()
+        env_set = "DATASET_NAME" in os.environ
+        nombre_base = cli_dataset or DATASET_NAME_RAW
+        global DATASET_NAME
+        DATASET_NAME = _canonical_dataset_name(nombre_base)
+        if cli_dataset:
+            print(f"[INFO] Dataset por CLI: '{cli_dataset}' → '{DATASET_NAME}'")
+        elif not env_set and DATASET_NAME_RAW == "adl_fall_multiclass":
+            print("[INFO] Usando dataset por defecto 'adl_fall_multiclass'. "
+                  "Para 9 clases ejecuta con --dataset entrenamiento_9_clases "
+                  "o set DATASET_NAME=entrenamiento_9_clases")
+        elif DATASET_NAME != DATASET_NAME_RAW:
+            print(f"[INFO] Alias de dataset detectado: '{DATASET_NAME_RAW}' → '{DATASET_NAME}'")
+
         # 1. Cargar datos
         X, y, nombres_clases = cargar_datos(DATASET_NAME)
 
@@ -475,18 +823,21 @@ def main():
         )
 
         # 7. Guardar modelo y métricas
-        model.save(MODELS_DIR / f"{DATASET_NAME}_modelo.h5")
-        print(f"\n✓ Modelo guardado: {MODELS_DIR}/{DATASET_NAME}_modelo.h5")
+        _limpiar_modelos_antiguos(DATASET_NAME)
+        modelo_base = _nombre_base_modelo(DATASET_NAME)
+        modelo_path = MODELS_DIR / f"{modelo_base}_modelo.keras"
+        model.save(modelo_path)
+        print(f"\n✓ Modelo guardado: {modelo_path}")
 
-        guardar_metricas(metricas, history, DATASET_NAME)
+        guardar_metricas(metricas, history, DATASET_NAME, model)
 
         # 8. Visualizar
-        graficar_historico(history, DATASET_NAME)
+        graficar_historico(history, modelo_base)
 
         # 9. Guardar artefactos para el reporte
-        np.save(LOGS_DIR / f"{DATASET_NAME}_y_test.npy", y_test_eval)
-        np.save(LOGS_DIR / f"{DATASET_NAME}_y_pred.npy", y_pred)
-        np.save(LOGS_DIR / f"{DATASET_NAME}_matriz_confusion.npy", cm)
+        np.save(LOGS_DIR / f"{modelo_base}_y_test.npy", y_test_eval)
+        np.save(LOGS_DIR / f"{modelo_base}_y_pred.npy", y_pred)
+        np.save(LOGS_DIR / f"{modelo_base}_matriz_confusion.npy", cm)
 
         print("\n" + "="*70)
         print("✓ ENTRENAMIENTO COMPLETADO EXITOSAMENTE")
