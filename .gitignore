@@ -83,15 +83,19 @@ data/UniMiB-SHAR/
 
 # Trained model weights and checkpoints
 models/
+exports/
 checkpoints/
 weights/
 *.weights
+*.tflite
+*.keras
 saved_models/
 
 # Training logs and metrics
 logs/
 runs/
 *.log
+*.npy
 .wandb/
 tensorboard_logs/
 
