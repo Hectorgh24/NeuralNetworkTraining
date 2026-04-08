@@ -107,6 +107,7 @@ tensorboard_logs/
 *.csv
 *.xlsx
 *.json
+*.zip
 
 # ============================================================================
 # Temporary and Cache Files
