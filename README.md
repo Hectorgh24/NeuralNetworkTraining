@@ -36,6 +36,11 @@ Autor: **Héctor (Estudiante de Licenciatura en Tecnologías Computacionales)**.
 - **entrenamiento_9_clases** (alias: `two_classes`, `9_clases`)
 
 ## 🛠️ Pipeline Secuencial Paso a Paso (ambos modelos: 9 y 17 clases)
+0) **Descargar datos (ligero el repo, datos externos)**
+   ```bash
+   python scripts/download_data.py
+   ```
+   - Usa Google Drive (carpetas compartidas). Coloca los NPZ en `data/raw_float32` y `data/raw_float64`.
 1) **Preparar entorno**
    ```bash
    python -m venv venv
@@ -93,12 +98,15 @@ TensorFlow/
 │   ├── generar_reporte.py      # Reportes PDF por dataset
 │   └── exportar_tflite.py      # Conversión .keras → .tflite
 ├── data/
-│   └── raw_float32/            # NPZ convertidos (acc/adl/fall/two_classes)
+│   ├── raw_float32/            # NPZ convertidos (se descargan con script)
+│   └── raw_float64/            # Backup/alternativa (también descargable)
 ├── models/                     # .keras, métricas .json, PDFs
 ├── logs/                       # y_test/y_pred/matriz_confusión + gráficos
 ├── exports/
 │   ├── edge_impulse.edgei/     # Carpetas de clases (insumos etiquetados)
 │   └── exportsTflite/          # Modelos .tflite listos para Android
+├── scripts/
+│   └── download_data.py        # Descarga datasets desde Google Drive
 ├── convert_mat_to_npz.py       # .mat → .npz
 ├── convert_to_float32.py       # Normalización a float32
 ├── requirements.txt
