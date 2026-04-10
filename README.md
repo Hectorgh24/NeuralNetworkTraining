@@ -47,7 +47,10 @@ Autor: **Héctor (Estudiante de Licenciatura en Tecnologías Computacionales)**.
    .\venv\Scripts\activate
    pip install -r requirements.txt
    ```
-2) **Convertir datos crudos** (`.mat` → `.npz`, una sola vez)
+2) **Convertir datos crudos** (`.mat` → `.npz`, solo si no usaste el paso 0)
+   - Si prefieres descargar los `.mat` originales del dataset UniMiB-SHAR, obtén el zip desde:  
+     https://www.dropbox.com/scl/fi/g5ig8nw9qqd253dz8woax/UniMiB-SHAR.zip?e=5&file_subpath=%2FUniMiB-SHAR%2Fdata%2Fresults%2Fresults51&rlkey=o0ltu8ivrr9rsfvdhr1bjv3cc&dl=0  
+   - Luego convierte a NPZ con:
    ```bash
    python convert_mat_to_npz.py
    python convert_to_float32.py
