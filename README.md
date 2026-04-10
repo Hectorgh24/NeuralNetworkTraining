@@ -1,113 +1,138 @@
 # Red Neuronal para Clasificación de Actividades Humanas
 
-Proyecto completo para entrenar, evaluar y desplegar modelos de clasificación de actividades humanas (UniMiB-SHAR) en dispositivos móviles/edge con TensorFlow Lite.
+Proyecto completo para entrenar, evaluar y desplegar modelos de clasificación de actividades humanas (UniMiB-SHAR) en dispositivos móviles/edge con TensorFlow Lite.  
+Autor: **Héctor (Estudiante de Licenciatura en Tecnologías Computacionales)**.
 
-## Tabla rápida de flujo
-1) Convertir datos crudos `.mat` → `.npz` (`convert_mat_to_npz.py`, `convert_to_float32.py`).  
-2) Entrenar (`src/entrenamiento.py --dataset entrenamiento_17_clases | entrenamiento_9_clases`).  
-3) Generar reporte PDF (`src/generar_reporte.py --dataset ...`).  
-4) Exportar a TFLite (`src/exportar_tflite.py --dataset ... [--float16]`).
+## 🧭 Índice
+1. [Visión General](#-visión-general)
+2. [Diferencias de Arquitectura (antes vs ahora)](#-diferencias-de-arquitectura-antes-vs-ahora)
+3. [Datasets Soportados](#-datasets-soportados)
+4. [Pipeline Secuencial Paso a Paso](#-pipeline-secuencial-paso-a-paso)
+5. [Artefactos que se generan](#-artefactos-que-se-generan)
+6. [Exportación a TensorFlow Lite](#-exportación-a-tensorflow-lite)
+7. [Estructura del Proyecto](#-estructura-del-proyecto)
+8. [Errores Comunes y cómo resolverlos](#-errores-comunes-y-cómo-resolverlos)
+9. [Documentación usada](#-documentación-usada)
+10. [Glosario ampliado](#-glosario-ampliado)
+11. [Licencia y contribución](#-licencia-y-contribución)
 
-## Datasets soportados
-- **entrenamiento_17_clases** (alias: `adl_fall_multiclass`, `17_clases`, `acc`): actividades completas (17 clases).  
-- **entrenamiento_9_clases** (alias: `two_classes`, `9_clases`): caminar + 8 tipos de caída (9 clases totales).
+## 📝 Visión General
+- Clasificación de actividades humanas con acelerómetro (UniMiB-SHAR).
+- Enfoque orientado a **Edge AI**: modelos ligeros + exportación TFLite.
+- Dos configuraciones de clases: 17 (completo) y 9 (caminar + caídas).
 
-## Arquitectura y entrenamiento
-- **Modelo:** Conv1D para Edge AI (ruido gaussiano, 3 bloques Conv1D+BN+ReLU+MaxPool, GAP, Dense 128 + Dropout, Softmax).  
-- **Hiperparámetros base:** `BATCH_SIZE=32`, `EPOCHS=100`, `LR=0.001`, `TEST_SIZE=0.2`, `VAL_SIZE=0.2`.  
-- **Callbacks:** EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, TensorBoard.  
-- **Balanceo:** `class_weight` dinámico para caídas desbalanceadas.  
-- **Entrenar:**  
-  ```bash
-  cd src
-  python entrenamiento.py --dataset entrenamiento_17_clases
-  python entrenamiento.py --dataset entrenamiento_9_clases
-  ```
+## 🧱 Diferencias de Arquitectura (antes vs ahora)
+- **Antes (MLP denso):**
+  - Entrada aplanada (453 valores) sin respetar la estructura temporal.
+  - Menos adecuado para capturar patrones locales de movimiento.
+  - Tamaño mayor y menos eficiente en dispositivos edge.
+- **Ahora (Conv1D):**
+  - Reordena datos a (tiempo, ejes) y aplica convoluciones 1D en ventanas cortas.
+  - BatchNorm + Dropout + GaussianNoise para robustez y regularización.
+  - GlobalAveragePooling para reducir parámetros antes de la capa densa final.
+  - Mejor generalización para secuencias de acelerómetro y menor huella para TFLite.
+> Si no estás seguro de cifras exactas, quédate con la idea: Conv1D captura patrones temporales y suele ser más liviano que el MLP previo.
 
-### Artefactos generados (por prefijo de modelo)
-- Modelos Keras: `models/<prefijo>_modelo.keras`, `models/<prefijo>_mejor_modelo.keras`.
-- Métricas: `models/<prefijo>_metricas.json`.
-- NPY para reportes: `logs/<prefijo>_y_test.npy`, `logs/<prefijo>_y_pred.npy`, `logs/<prefijo>_matriz_confusion.npy`.
-- Gráficos: `logs/<prefijo>_historico.png`.
+## 🗂️ Datasets Soportados
+- **entrenamiento_17_clases** (alias: `adl_fall_multiclass`, `17_clases`, `acc`)
+- **entrenamiento_9_clases** (alias: `two_classes`, `9_clases`)
 
-> `<prefijo>` es `entrenamiento_17_clases` o `entrenamiento_9_clases` según dataset.
+## 🛠️ Pipeline Secuencial Paso a Paso
+1) **Preparar entorno**
+   ```bash
+   python -m venv venv
+   .\venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+2) **Convertir datos crudos** (`.mat` → `.npz`, una sola vez)
+   ```bash
+   python convert_mat_to_npz.py
+   python convert_to_float32.py
+   ```
+   - Salida esperada: `data/raw_float32/*_data.npz`, `*_labels.npz`, `*_names.npz`.
+3) **Entrenar** (elige dataset)
+   ```bash
+   python src/entrenamiento.py --dataset entrenamiento_17_clases
+   python src/entrenamiento.py --dataset entrenamiento_9_clases
+   ```
+4) **Generar reporte PDF**
+   ```bash
+   python src/generar_reporte.py --dataset entrenamiento_17_clases
+   python src/generar_reporte.py --dataset entrenamiento_9_clases
+   ```
+5) **Exportar a TFLite**
+   ```bash
+   python src/exportar_tflite.py --dataset entrenamiento_17_clases --output-dir exports/exportsTflite
+   python src/exportar_tflite.py --dataset entrenamiento_9_clases --output-dir exports/exportsTflite --float16
+   ```
+6) **Usar en móvil/edge**
+   - Copia el `.tflite` a tu app y cárgalo con TensorFlow Lite (NNAPI / GPU delegate si aplica).
 
-### Diferencia clave
-- `_modelo.keras`: último checkpoint.
-- `_mejor_modelo.keras`: mejor validación (recomendado para inferencia y TFLite).
+## 📦 Artefactos que se generan
+- Modelos: `models/<prefijo>_modelo.keras`, `models/<prefijo>_mejor_modelo.keras`
+- Métricas: `models/<prefijo>_metricas.json`
+- Datos para reporte: `logs/<prefijo>_y_test.npy`, `logs/<prefijo>_y_pred.npy`, `logs/<prefijo>_matriz_confusion.npy`
+- Gráficos: `logs/<prefijo>_historico.png`, métricas y matrices
+- Reporte: `models/<prefijo>.pdf`
+- TFLite: `exports/exportsTflite/<prefijo>_modelo.tflite`
+> `<prefijo>` = `entrenamiento_17_clases` o `entrenamiento_9_clases`.
 
-## Datos y conversión
-- Origen: archivos `.mat` de UniMiB-SHAR (acelerómetro).  
-- Conversión a NPZ comprimido:  
-  ```bash
-  python convert_mat_to_npz.py
-  python convert_to_float32.py
-  ```
-- Ubicación esperada: `data/raw_float32/` con `*_data.npz`, `*_labels.npz`, `*_names.npz`.
+## 📲 Exportación a TensorFlow Lite
+- Script: `src/exportar_tflite.py`
+- `--float16` (opcional): reduce tamaño; úsalo si el dispositivo soporta FP16.  
+- Si no especificas `--input`, toma automáticamente el modelo .keras según el dataset.
 
-## Reportes PDF
-- Script: `src/generar_reporte.py`.  
-- Produce: `models/entrenamiento_17_clases.pdf` o `models/entrenamiento_9_clases.pdf`.  
-- Incluye: métricas globales, por clase, matrices de confusión, histórico, tablas técnicas y configuración de entrenamiento.
-
-## Exportación a TensorFlow Lite
-- Script: `src/exportar_tflite.py` (usa el prefijo base automáticamente).  
-- Ejemplos:
-  ```bash
-  python src/exportar_tflite.py --dataset entrenamiento_17_clases --output-dir exports/exportsTflite
-  python src/exportar_tflite.py --dataset entrenamiento_9_clases --output-dir exports/exportsTflite --float16
-  ```
-- Salida: `exports/exportsTflite/<prefijo>_modelo.tflite`.  
-- `--float16`: reduce tamaño (~40–50%) y suele mejorar latencia en hardware con soporte FP16. Úsalo cuando el dispositivo lo soporte; deja sin bandera si necesitas reproducir float32 exacto.
-
-## Estructura del proyecto
+## 🗺️ Estructura del Proyecto
 ```
 TensorFlow/
-├── src/
-│   ├── entrenamiento.py        # Entrenamiento y guardado de métricas/modelos
-│   ├── generar_reporte.py      # Reportes PDF
-│   └── exportar_tflite.py      # Conversión a .tflite
-├── data/                       # Datos NPZ convertidos (local)
-├── models/                     # Modelos .keras y métricas .json
-├── logs/                       # NPY y gráficos para reportes
+├── src/                     # Código de entrenamiento, reportes y exportación
+├── data/                    # Datos NPZ convertidos (local)
+├── models/                  # Modelos .keras, métricas .json, PDFs
+├── logs/                    # NPY y gráficos
 ├── exports/
-│   ├── edge_impulse.edgei/     # Carpetas de clases para Edge Impulse
-│   └── exportsTflite/          # Modelos .tflite
+│   ├── edge_impulse.edgei/  # Carpetas de clases para Edge Impulse
+│   └── exportsTflite/       # Modelos .tflite
 ├── convert_mat_to_npz.py
 ├── convert_to_float32.py
 ├── requirements.txt
 └── README.md
 ```
 
-## Uso rápido
-1. **Activar entorno**  
-   ```bash
-   python -m venv venv
-   .\venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-2. **Entrenar** (elige dataset): `python src/entrenamiento.py --dataset entrenamiento_17_clases`
-3. **Generar PDF**: `python src/generar_reporte.py --dataset entrenamiento_17_clases`
-4. **Exportar TFLite**: `python src/exportar_tflite.py --dataset entrenamiento_17_clases --output-dir exports/exportsTflite`
+## 🐞 Errores Comunes y cómo resolverlos
+- **Falta TensorFlow / dependencias**: `pip install -r requirements.txt`.
+- **No encuentra datos (`File not found`)**: verifica que `data/raw_float32/` contenga los `.npz`; si no, ejecuta los convertidores.
+- **GPU no aparece**: `python - <<<'import tensorflow as tf; print(tf.config.list_physical_devices("GPU"))'`; si retorna `[]`, revisa drivers/CUDA o usa CPU.
+- **ValueError por shapes**: asegura que uses el dataset correcto; limpia artefactos viejos borrando `logs/*.npy` y `models/*_metricas.json` si cambiaste de configuración.
+- **Reporte falla al cargar métricas**: confirma que corriste entrenamiento antes del PDF y que el prefijo coincide (`entrenamiento_9_clases` vs `entrenamiento_17_clases`).
 
-## Métricas esperadas (referenciales)
-- Accuracy / Recall / F1 (macro): 0.84–0.92 según dataset y semilla.
-- Tamaño `.keras`: ~1.9 MB; `.tflite`: ~0.16 MB (con optimización default); menos con `--float16`.
+## 📚 Documentación usada
+- TensorFlow / Keras API (modelado, callbacks, TFLite Converter)
+- scikit-learn (StandardScaler, class_weight, métricas)
+- UniMiB-SHAR dataset (especificación de actividades y archivos .mat)
+- ReportLab + Matplotlib + Seaborn (generación de PDF y gráficos)
 
-## Glosario mínimo
-- **StandardScaler:** media 0, varianza 1.  
-- **BatchNorm / Dropout:** estabiliza y regulariza el entrenamiento.  
-- **EarlyStopping / ModelCheckpoint:** evita overfitting y guarda el mejor modelo.  
-- **TFLite:** formato optimizado para inferencia en móvil/edge.
+## 📖 Glosario ampliado
+- **StandardScaler**: normaliza características a media 0, varianza 1.
+- **BatchNormalization**: estabiliza activaciones para entrenar más rápido y estable.
+- **Dropout**: apaga neuronas aleatoriamente durante el entrenamiento para reducir sobreajuste.
+- **GaussianNoise**: añade ruido controlado a la entrada para robustez.
+- **EarlyStopping**: detiene el entrenamiento si la métrica de validación deja de mejorar.
+- **ModelCheckpoint**: guarda el mejor modelo observado en validación.
+- **ReduceLROnPlateau**: baja la tasa de aprendizaje cuando no mejora la validación.
+- **Class Weighting**: pesos por clase para compensar desbalance.
+- **Focal Loss**: pérdida que penaliza más los ejemplos difíciles/clases minoritarias.
+- **Conv1D**: convoluciones sobre secuencias unidimensionales (tiempo); detectan patrones locales.
+- **GlobalAveragePooling**: resume cada mapa de características promediando, reduciendo parámetros antes de la capa densa.
+- **TFLite**: formato ligero de TensorFlow para inferencia en móvil/edge.
+- **Cuantización Float16**: convierte pesos a FP16; reduce tamaño y puede acelerar en hardware compatible.
+- **NNAPI / GPU delegate**: aceleradores de TFLite en Android (CPU/GPU/DSP/TPU según dispositivo).
+- **Numpy NPZ**: contenedor comprimido de arrays; rápido de cargar.
+- **Matriz de confusión**: tabla de aciertos/errores por clase.
+- **F1-score**: media armónica de precisión y recall; útil en desbalance.
 
-## Solución de problemas
-- Falta TensorFlow: `pip install tensorflow`.  
-- Datos no encontrados: coloca NPZ en `data/raw_float32/` y ejecuta los convertidores.  
-- GPU no detectada: `python - <<<'import tensorflow as tf; print(tf.config.list_physical_devices(\"GPU\"))'`.
-
-## Licencia y contribución
-- Licencia MIT (ver `LICENSE`).  
-- Autor: Héctor (Estudiante de Licenciatura en Tecnologías Computacionales).  
+## 📜 Licencia y contribución
+- Licencia: **MIT** (ver `LICENSE`).
+- Autor: Héctor (Estudiante de Licenciatura en Tecnologías Computacionales).
 - PRs bienvenidos: fork, rama feature, PR.
 
 ---
