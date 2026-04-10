@@ -61,8 +61,12 @@ Autor: **Héctor (Estudiante de Licenciatura en Tecnologías Computacionales)**.
 5) **Exportar a TFLite**
    ```bash
    python src/exportar_tflite.py --dataset entrenamiento_17_clases --output-dir exports/exportsTflite
-   python src/exportar_tflite.py --dataset entrenamiento_9_clases --output-dir exports/exportsTflite --float16
+    python src/exportar_tflite.py --dataset entrenamiento_9_clases --output-dir exports/exportsTflite
    ```
+   - Opcional (reducción de tamaño con soporte FP16):  
+     ```bash
+     python src/exportar_tflite.py --dataset entrenamiento_9_clases --output-dir exports/exportsTflite --float16
+     ```
 6) **Usar en aplicación móvil (Kotlin/Android)**
    - Copia el `.tflite` correspondiente (9 o 17 clases) y cárgalo con el intérprete de TensorFlow Lite.  
    - Usa NNAPI/GPU delegate si el dispositivo lo soporta; si no, el intérprete CPU funciona.
