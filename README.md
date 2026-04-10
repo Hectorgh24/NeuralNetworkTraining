@@ -119,6 +119,24 @@ TensorFlow/
 - Seaborn: https://seaborn.pydata.org/
 
 ## 📖 Glosario
+- **Normalización (StandardScaler):** escala cada feature a media 0 y desviación estándar 1 para estabilizar el entrenamiento de redes.
+- **Etiquetado y remapeo:** los IDs originales del dataset se reindexan a clases consecutivas (p. ej., 0–8 o 0–16) para simplificar la salida softmax.
+- **Conv1D:** capas convolucionales 1D que barren la dimensión temporal para extraer patrones locales en series de tiempo.
+- **GaussianNoise:** ruido añadido a la entrada durante el entrenamiento; actúa como data augmentation y regularizador.
+- **Batch Normalization:** normaliza activaciones intermedias por batch para acelerar y estabilizar el aprendizaje.
+- **Dropout:** desactiva aleatoriamente neuronas en entrenamiento para reducir sobreajuste.
+- **Global Average Pooling (GAP):** promedia cada mapa de características, reduciendo parámetros antes de la capa densa final.
+- **Función de pérdida (cross-entropy):** mide divergencia entre distribución predicha y etiquetas verdaderas en clasificación multiclase.
+- **Class weighting:** asigna mayor peso a clases minoritarias para mitigar desbalance y reducir sesgo del modelo.
+- **Callbacks de entrenamiento:**  
+  - *EarlyStopping*: detiene cuando la validación deja de mejorar.  
+  - *ModelCheckpoint*: guarda el mejor modelo observado.  
+  - *ReduceLROnPlateau*: baja la tasa de aprendizaje al estancarse la validación.
+- **Métricas de evaluación:** accuracy, precision, recall, F1-score, matriz de confusión (aciertos/errores por clase).
+- **Inferencia vs. entrenamiento:** el modelo guardado (`_mejor_modelo`) se usa para despliegue; `_modelo` es el último estado de la sesión.
+- **TensorFlow Lite (TFLite):** formato optimizado para inferencia en dispositivos móviles/embebidos.
+- **Cuantización Float16 (post-training):** convierte pesos a FP16 para reducir tamaño; mantiene la estructura del grafo y suele conservar precisión.
+- **Delegados (NNAPI/GPU):** aceleran la ejecución TFLite en Android usando hardware dedicado cuando está disponible.
 
 ## 📜 Licencia y contribución
 - Licencia: **MIT** (ver `LICENSE`).
