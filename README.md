@@ -18,26 +18,24 @@ Autor: **Héctor (Estudiante de Licenciatura en Tecnologías Computacionales)**.
 
 ## 📝 Visión General
 - Clasificación de actividades humanas con acelerómetro (UniMiB-SHAR).
-- Enfoque orientado a **Edge AI**: modelos ligeros + exportación TFLite.
+- Modelos optimizados para desplegarse en **aplicaciones móviles (Kotlin/Android) mediante TFLite**.
 - Dos configuraciones de clases: 17 (completo) y 9 (caminar + caídas).
 
 ## 🧱 Diferencias de Arquitectura (antes vs ahora)
-- **Antes (MLP denso):**
-  - Entrada aplanada (453 valores) sin respetar la estructura temporal.
-  - Menos adecuado para capturar patrones locales de movimiento.
-  - Tamaño mayor y menos eficiente en dispositivos edge.
-- **Ahora (Conv1D):**
-  - Reordena datos a (tiempo, ejes) y aplica convoluciones 1D en ventanas cortas.
-  - BatchNorm + Dropout + GaussianNoise para robustez y regularización.
-  - GlobalAveragePooling para reducir parámetros antes de la capa densa final.
-  - Mejor generalización para secuencias de acelerómetro y menor huella para TFLite.
-> Si no estás seguro de cifras exactas, quédate con la idea: Conv1D captura patrones temporales y suele ser más liviano que el MLP previo.
+- **Antes (MLP denso)**  
+  - Aplanaba las 453 features → perdía la relación temporal de las 151 muestras.  
+  - Más parámetros y menos eficiencia en despliegue móvil.  
+- **Ahora (Conv1D)**  
+  - Mantiene la forma (tiempo × ejes) y extrae patrones locales.  
+  - BatchNorm + Dropout + GaussianNoise para robustez.  
+  - GlobalAveragePooling reduce parámetros antes de la capa final.  
+  - Mejor ajuste para exportar a TFLite y ejecutar en Android.
 
 ## 🗂️ Datasets Soportados
 - **entrenamiento_17_clases** (alias: `adl_fall_multiclass`, `17_clases`, `acc`)
 - **entrenamiento_9_clases** (alias: `two_classes`, `9_clases`)
 
-## 🛠️ Pipeline Secuencial Paso a Paso
+## 🛠️ Pipeline Secuencial Paso a Paso (ambos modelos: 9 y 17 clases)
 1) **Preparar entorno**
    ```bash
    python -m venv venv
@@ -65,14 +63,15 @@ Autor: **Héctor (Estudiante de Licenciatura en Tecnologías Computacionales)**.
    python src/exportar_tflite.py --dataset entrenamiento_17_clases --output-dir exports/exportsTflite
    python src/exportar_tflite.py --dataset entrenamiento_9_clases --output-dir exports/exportsTflite --float16
    ```
-6) **Usar en móvil/edge**
-   - Copia el `.tflite` a tu app y cárgalo con TensorFlow Lite (NNAPI / GPU delegate si aplica).
+6) **Usar en aplicación móvil (Kotlin/Android)**
+   - Copia el `.tflite` correspondiente (9 o 17 clases) y cárgalo con el intérprete de TensorFlow Lite.  
+   - Usa NNAPI/GPU delegate si el dispositivo lo soporta; si no, el intérprete CPU funciona.
 
 ## 📦 Artefactos que se generan
-- Modelos: `models/<prefijo>_modelo.keras`, `models/<prefijo>_mejor_modelo.keras`
+- Modelos Keras: `models/<prefijo>_modelo.keras`, `models/<prefijo>_mejor_modelo.keras`
 - Métricas: `models/<prefijo>_metricas.json`
 - Datos para reporte: `logs/<prefijo>_y_test.npy`, `logs/<prefijo>_y_pred.npy`, `logs/<prefijo>_matriz_confusion.npy`
-- Gráficos: `logs/<prefijo>_historico.png`, métricas y matrices
+- Gráficos: `logs/<prefijo>_historico.png`, `logs/<prefijo>_metricas_*.png`
 - Reporte: `models/<prefijo>.pdf`
 - TFLite: `exports/exportsTflite/<prefijo>_modelo.tflite`
 > `<prefijo>` = `entrenamiento_17_clases` o `entrenamiento_9_clases`.
@@ -85,15 +84,19 @@ Autor: **Héctor (Estudiante de Licenciatura en Tecnologías Computacionales)**.
 ## 🗺️ Estructura del Proyecto
 ```
 TensorFlow/
-├── src/                     # Código de entrenamiento, reportes y exportación
-├── data/                    # Datos NPZ convertidos (local)
-├── models/                  # Modelos .keras, métricas .json, PDFs
-├── logs/                    # NPY y gráficos
+├── src/
+│   ├── entrenamiento.py        # Entrenamiento y guardado de modelos/métricas
+│   ├── generar_reporte.py      # Reportes PDF por dataset
+│   └── exportar_tflite.py      # Conversión .keras → .tflite
+├── data/
+│   └── raw_float32/            # NPZ convertidos (acc/adl/fall/two_classes)
+├── models/                     # .keras, métricas .json, PDFs
+├── logs/                       # y_test/y_pred/matriz_confusión + gráficos
 ├── exports/
-│   ├── edge_impulse.edgei/  # Carpetas de clases para Edge Impulse
-│   └── exportsTflite/       # Modelos .tflite
-├── convert_mat_to_npz.py
-├── convert_to_float32.py
+│   ├── edge_impulse.edgei/     # Carpetas de clases (insumos etiquetados)
+│   └── exportsTflite/          # Modelos .tflite listos para Android
+├── convert_mat_to_npz.py       # .mat → .npz
+├── convert_to_float32.py       # Normalización a float32
 ├── requirements.txt
 └── README.md
 ```
@@ -106,29 +109,16 @@ TensorFlow/
 - **Reporte falla al cargar métricas**: confirma que corriste entrenamiento antes del PDF y que el prefijo coincide (`entrenamiento_9_clases` vs `entrenamiento_17_clases`).
 
 ## 📚 Documentación usada
-- TensorFlow / Keras API (modelado, callbacks, TFLite Converter)
-- scikit-learn (StandardScaler, class_weight, métricas)
-- UniMiB-SHAR dataset (especificación de actividades y archivos .mat)
-- ReportLab + Matplotlib + Seaborn (generación de PDF y gráficos)
+- TensorFlow: https://www.tensorflow.org/api_docs
+- Keras: https://keras.io/api/
+- TensorFlow Lite Converter: https://www.tensorflow.org/lite/convert
+- scikit-learn: https://scikit-learn.org/stable/
+- UniMiB-SHAR dataset: https://www.dropbox.com/scl/fi/g5ig8nw9qqd253dz8woax/UniMiB-SHAR.zip?e=4&file_subpath=%2FUniMiB-SHAR%2Fdata%2Fresults%2Fresults51&rlkey=o0ltu8ivrr9rsfvdhr1bjv3cc&dl=0
+- ReportLab: https://www.reportlab.com/documentation/
+- Matplotlib: https://matplotlib.org/stable/contents.html
+- Seaborn: https://seaborn.pydata.org/
 
-## 📖 Glosario ampliado
-- **StandardScaler**: normaliza características a media 0, varianza 1.
-- **BatchNormalization**: estabiliza activaciones para entrenar más rápido y estable.
-- **Dropout**: apaga neuronas aleatoriamente durante el entrenamiento para reducir sobreajuste.
-- **GaussianNoise**: añade ruido controlado a la entrada para robustez.
-- **EarlyStopping**: detiene el entrenamiento si la métrica de validación deja de mejorar.
-- **ModelCheckpoint**: guarda el mejor modelo observado en validación.
-- **ReduceLROnPlateau**: baja la tasa de aprendizaje cuando no mejora la validación.
-- **Class Weighting**: pesos por clase para compensar desbalance.
-- **Focal Loss**: pérdida que penaliza más los ejemplos difíciles/clases minoritarias.
-- **Conv1D**: convoluciones sobre secuencias unidimensionales (tiempo); detectan patrones locales.
-- **GlobalAveragePooling**: resume cada mapa de características promediando, reduciendo parámetros antes de la capa densa.
-- **TFLite**: formato ligero de TensorFlow para inferencia en móvil/edge.
-- **Cuantización Float16**: convierte pesos a FP16; reduce tamaño y puede acelerar en hardware compatible.
-- **NNAPI / GPU delegate**: aceleradores de TFLite en Android (CPU/GPU/DSP/TPU según dispositivo).
-- **Numpy NPZ**: contenedor comprimido de arrays; rápido de cargar.
-- **Matriz de confusión**: tabla de aciertos/errores por clase.
-- **F1-score**: media armónica de precisión y recall; útil en desbalance.
+## 📖 Glosario
 
 ## 📜 Licencia y contribución
 - Licencia: **MIT** (ver `LICENSE`).
