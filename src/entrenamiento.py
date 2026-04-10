@@ -824,7 +824,9 @@ def guardar_metricas(metricas, historico, modelo_nombre, model):
     if DATASET_NAME == "two_classes":
         metricas['clases_detalle'] = TWO_CLASSES_DETALLE
 
-    ruta_metricas = MODELS_DIR / f"{modelo_nombre}_metricas.json"
+    # Guardamos métricas nombradas por el prefijo base del modelo (9 vs 17 clases)
+    base = _nombre_base_modelo(modelo_nombre)
+    ruta_metricas = MODELS_DIR / f"{base}_metricas.json"
     ruta_temp = ruta_metricas.with_suffix(".json.tmp")
 
     metricas_jsonable = _to_jsonable(metricas)

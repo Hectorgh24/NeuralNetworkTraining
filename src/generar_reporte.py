@@ -56,13 +56,14 @@ def _borrar_artefactos_previos(dataset_name):
     """
     Elimina artefactos gráficos y PDF previos para garantizar regeneración fresca.
     """
+    base = _nombre_base_modelo(dataset_name)
     pdf_nombre = _nombre_pdf(dataset_name)
     patrones = [
-        f"{dataset_name}_matriz_confusion.png",
-        f"{dataset_name}_metricas_globales.png",
-        f"{dataset_name}_metricas_por_clase.png",
-        f"{dataset_name}_historico_completo.png",
-        f"{dataset_name}_reporte_entrenamiento.pdf",
+        f"{base}_matriz_confusion.png",
+        f"{base}_metricas_globales.png",
+        f"{base}_metricas_por_clase.png",
+        f"{base}_historico_completo.png",
+        f"{base}_reporte_entrenamiento.pdf",
         pdf_nombre,
     ]
     for nombre in patrones:
@@ -169,7 +170,8 @@ def cargar_metricas(dataset_name):
     Returns:
         dict: Métricas cargadas
     """
-    ruta_metricas = MODELS_DIR / f"{dataset_name}_metricas.json"
+    base = _nombre_base_modelo(dataset_name)
+    ruta_metricas = MODELS_DIR / f"{base}_metricas.json"
 
     if not ruta_metricas.exists():
         raise FileNotFoundError(f"Archivo de métricas no encontrado: {ruta_metricas}")
