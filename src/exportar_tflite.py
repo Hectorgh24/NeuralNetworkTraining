@@ -63,7 +63,7 @@ def construir_argumentos() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path(__file__).resolve().parents[1] / "exports" / "tflite",
+        default=Path(__file__).resolve().parents[1] / "exports" / "exportsTflite",
         help="Directorio donde se guardará el .tflite.",
     )
     parser.add_argument(

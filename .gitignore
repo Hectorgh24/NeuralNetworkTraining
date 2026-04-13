@@ -86,6 +86,8 @@ models/
 exports/
 !exports/parametros-preprocesamiento/
 !exports/parametros-preprocesamiento/.gitkeep
+!exports/exportsTflite/
+!exports/exportsTflite/.gitkeep
 checkpoints/
 weights/
 *.weights
