@@ -73,23 +73,33 @@ Autor: **Héctor (Estudiante de Licenciatura en Tecnologías Computacionales)**.
 5) **Exportar a TFLite**
    ```bash
    python src/exportar_tflite.py --dataset entrenamiento_17_clases --output-dir exports/exportsTflite
-    python src/exportar_tflite.py --dataset entrenamiento_9_clases --output-dir exports/exportsTflite
+   python src/exportar_tflite.py --dataset entrenamiento_9_clases --output-dir exports/exportsTflite
    ```
-   - Opcional (reducción de tamaño con soporte FP16):  
+   - Opcional (reducción de tamaño con soporte FP16):
      ```bash
      python src/exportar_tflite.py --dataset entrenamiento_9_clases --output-dir exports/exportsTflite --float16
      ```
-6) **Usar en aplicación móvil (Kotlin/Android)**
-   - Copia el `.tflite` correspondiente (9 o 17 clases) y cárgalo con el intérprete de TensorFlow Lite.  
-   - Usa NNAPI/GPU delegate si el dispositivo lo soporta; si no, el intérprete CPU funciona.
-
-## 📦 Artefactos que se generan
+6) **Exportar parámetros de preprocesamiento**
+   ```bash
+   python exportar_parametros_preprocesamiento.py --dataset entrenamiento_17_clases
+   python exportar_parametros_preprocesamiento.py --dataset entrenamiento_9_clases
+   ```
+   - Genera el JSON con `mean` y `scale` del `StandardScaler` usado en entrenamiento.
+   - Los archivos se guardan en `exports/parametros-preprocesamiento/` como:
+     - `scaler_9_clases.json`
+     - `scaler_17_clases.json`
+   - Este JSON es el input recomendado para tu aplicación móvil Kotlin, para normalizar datos de acelerómetro con la misma escala usada por el modelo.
+   - Si deseas, activa también la generación de Kotlin con `--generate-kotlin` para crear `DataPreprocessor.kt` automáticamente.
+7) **Usar en aplicación móvil (Kotlin/Android)**
+   - Copia el `.tflite` correspondiente (9 o 17 clases) y cárgalo con el intérprete de TensorFlow Lite.
+   - Carga además el JSON de `exports/parametros-preprocesamiento/` para normalizar las entradas con la misma media y escala que el modelo espera.
 - Modelos Keras: `models/<prefijo>_modelo.keras`, `models/<prefijo>_mejor_modelo.keras`
 - Métricas: `models/<prefijo>_metricas.json`
 - Datos para reporte: `logs/<prefijo>_y_test.npy`, `logs/<prefijo>_y_pred.npy`, `logs/<prefijo>_matriz_confusion.npy`
 - Gráficos: `logs/<prefijo>_historico.png`, `logs/<prefijo>_metricas_*.png`
 - Reporte: `models/<prefijo>.pdf`
 - TFLite: `exports/exportsTflite/<prefijo>_modelo.tflite`
+- Parámetros de preprocesamiento: `exports/parametros-preprocesamiento/scaler_9_clases.json` y `exports/parametros-preprocesamiento/scaler_17_clases.json`
 > `<prefijo>` = `entrenamiento_17_clases` o `entrenamiento_9_clases`.
 
 ## 📲 Exportación a TensorFlow Lite
@@ -111,7 +121,8 @@ TensorFlow/
 ├── logs/                       # y_test/y_pred/matriz_confusión + gráficos
 ├── exports/
 │   ├── edge_impulse.edgei/     # Carpetas de clases (insumos etiquetados)
-│   └── exportsTflite/          # Modelos .tflite listos para Android
+│   ├── exportsTflite/          # Modelos .tflite listos para Android
+│   └── parametros-preprocesamiento/  # JSON de scaler para normalización en Kotlin
 ├── scripts/
 │   └── download_data.py        # Descarga datasets desde Google Drive
 ├── convert_mat_to_npz.py       # .mat → .npz
