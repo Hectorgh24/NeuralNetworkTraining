@@ -40,7 +40,10 @@ Autor: **Héctor (Estudiante de Licenciatura en Tecnologías Computacionales)**.
    ```bash
    python scripts/download_data.py
    ```
-   - Usa Google Drive (carpetas compartidas). Coloca los NPZ en `data/raw_float32` y `data/raw_float64`.
+   - Usa Google Drive (carpetas compartidas) y descarga **archivos ya convertidos**:  
+     - `data/raw_float32`: NPZ en precisión float32 (`*_data.npz`, `*_labels.npz`, `*_names.npz`) listos para entrenamiento y despliegue.  
+     - `data/raw_float64`: los mismos archivos en float64, útiles si quieres análisis con mayor precisión numérica o comparativas offline.  
+   - No incluye los `.mat` originales; solo los NPZ listos para usar.
 1) **Preparar entorno**
    ```bash
    python -m venv venv
