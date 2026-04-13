@@ -93,6 +93,9 @@ Autor: **Héctor (Estudiante de Licenciatura en Tecnologías Computacionales)**.
 7) **Usar en aplicación móvil (Kotlin/Android)**
    - Copia el `.tflite` correspondiente (9 o 17 clases) y cárgalo con el intérprete de TensorFlow Lite.
    - Carga además el JSON de `exports/parametros-preprocesamiento/` para normalizar las entradas con la misma media y escala que el modelo espera.
+   - Usa NNAPI/GPU delegate si el dispositivo lo soporta; si no, el intérprete CPU funciona.
+
+## 📦 Artefactos que se generan
 - Modelos Keras: `models/<prefijo>_modelo.keras`, `models/<prefijo>_mejor_modelo.keras`
 - Métricas: `models/<prefijo>_metricas.json`
 - Datos para reporte: `logs/<prefijo>_y_test.npy`, `logs/<prefijo>_y_pred.npy`, `logs/<prefijo>_matriz_confusion.npy`
@@ -100,12 +103,15 @@ Autor: **Héctor (Estudiante de Licenciatura en Tecnologías Computacionales)**.
 - Reporte: `models/<prefijo>.pdf`
 - TFLite: `exports/exportsTflite/<prefijo>_modelo.tflite`
 - Parámetros de preprocesamiento: `exports/parametros-preprocesamiento/scaler_9_clases.json` y `exports/parametros-preprocesamiento/scaler_17_clases.json`
+
 > `<prefijo>` = `entrenamiento_17_clases` o `entrenamiento_9_clases`.
 
 ## 📲 Exportación a TensorFlow Lite
 - Script: `src/exportar_tflite.py`
-- `--float16` (opcional): reduce tamaño; úsalo si el dispositivo soporta FP16.  
-- Si no especificas `--input`, toma automáticamente el modelo .keras según el dataset.
+- `--output-dir` (opcional): directorio de salida. Por defecto: `exports/exportsTflite/`
+- `--float16` (opcional): reduce tamaño; úsalo si el dispositivo soporta FP16.
+- `--int8` (opcional): cuantización int8 para máxima compresión.
+- Si no especificas `--dataset` o `--input`, toma automáticamente el modelo de 17 clases.
 
 ## 🗺️ Estructura del Proyecto
 ```
@@ -127,6 +133,7 @@ TensorFlow/
 │   └── download_data.py        # Descarga datasets desde Google Drive
 ├── convert_mat_to_npz.py       # .mat → .npz
 ├── convert_to_float32.py       # Normalización a float32
+├── exportar_parametros_preprocesamiento.py  # Exporta parámetros del scaler a JSON
 ├── requirements.txt
 └── README.md
 ```
