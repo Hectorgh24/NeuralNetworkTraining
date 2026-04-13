@@ -96,6 +96,10 @@ def build_kotlin_source(mean_values: List[float], scale_values: List[float]) -> 
 
 def export_json(json_path: Path, mean_values: List[float], scale_values: List[float], dataset_name: str) -> None:
     """Escribe los parámetros del scaler a un archivo JSON."""
+    if json_path.exists():
+        print(f"✓ El archivo JSON ya existe y no será sobreescrito: {json_path}")
+        return
+
     payload = {
         "dataset": dataset_name,
         "scaler": {

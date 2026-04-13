@@ -84,6 +84,8 @@ data/UniMiB-SHAR/
 # Trained model weights and checkpoints
 models/
 exports/
+!exports/parametros-preprocesamiento/
+!exports/parametros-preprocesamiento/.gitkeep
 checkpoints/
 weights/
 *.weights
