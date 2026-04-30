@@ -180,6 +180,29 @@ TensorFlow/
 - Autor: Héctor (Estudiante de Licenciatura en Tecnologías Computacionales).
 - PRs bienvenidos: fork, rama feature, PR.
 
+## 🚀 Exportación Masiva de Datasets a Edge Impulse
+- Si deseas mover el dataset entero pre-procesado a tu entorno cloud de [Edge Impulse](https://studio.edgeimpulse.com), sigue estos pasos:
+1. **Instalación Global (Una vez):** Asegúrate de tener NodeJS e instalar las utilidades si no se usó el `setup.ps1`:
+   ```bash
+   npm install -g edge-impulse-cli
+   ```
+2. **Generación de las divisiones de carpetas CSV (`exportar_edge_impulse.py`):**
+   - Exporta el dataset de 17 clases o de 9 clases usando el parámetro `--dataset`.
+   ```bash
+   python src/exportar_edge_impulse.py --dataset entrenamiento_17_clases
+   python src/exportar_edge_impulse.py --dataset entrenamiento_9_clases
+   ```
+   *Esto generará un directorio ordenado en `exports/edge_impulse_<dataset>.edgei/`.*
+3. **Subida Ciega / Autónoma (`auto_subida_edge_impulse.py`):**
+   - Ejecuta este script para subir archivo por archivo a su respectiva categoría en el proyecto de Edge Impulse sin interactuar manualmente.
+   - Las API Keys (tanto para el proyecto de 17 clases como para el de 9 clases) ya se encuentran configuradas en el código interno. Usa `--dataset` para seleccionar a cuál subir.
+   - Si deseas borrar los datos existentes en el proyecto antes de subir los nuevos, añade el flag `--clean`.
+   ```bash
+   python src/auto_subida_edge_impulse.py --dataset entrenamiento_17_clases --clean
+   python src/auto_subida_edge_impulse.py --dataset entrenamiento_9_clases --clean
+   ```
+   *Esto evitará que la interfaz web de Edge Impulse corrompa las etiquetas y solucionará el cuello de botella tradicional de subir miles de CSV a mano.*
+
 ---
 
 **Última actualización:** Abril 2026
