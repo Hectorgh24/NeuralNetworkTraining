@@ -3,6 +3,12 @@
 Proyecto completo para entrenar, evaluar y desplegar modelos de clasificación de actividades humanas (UniMiB-SHAR) en dispositivos móviles/edge con TensorFlow Lite.  
 Autor: **Héctor (Estudiante de Licenciatura en Tecnologías Computacionales)**.
 
+## 🚀 Instalación y Ejecución Rápida Automática (Recomendado)
+Para evitar errores manuales, puedes ejecutar todo el flujo de trabajo con un solo comando. Este script maestro actualizará tu entorno, descargará las dependencias y los datos pre-convertidos, y procesará de manera secuencial ambos modelos (17 y 9 clases). Realizará el entrenamiento, la generación de reportes y la exportación a TFLite por ti:
+```bash
+python ejecutar_todo.py
+```
+
 ## 🧭 Índice
 1. [Visión General](#-visión-general)
 2. [Diferencias de Arquitectura (antes vs ahora)](#-diferencias-de-arquitectura-antes-vs-ahora)
