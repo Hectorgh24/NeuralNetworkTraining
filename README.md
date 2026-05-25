@@ -98,9 +98,8 @@ Autor: **Héctor (Estudiante de Licenciatura en Tecnologías Computacionales)**.
 ## 📦 Artefactos que se generan
 - Modelos Keras: `models/<prefijo>_modelo.keras`, `models/<prefijo>_mejor_modelo.keras`
 - Métricas: `models/<prefijo>_metricas.json`
-- Datos para reporte: `logs/<prefijo>_y_test.npy`, `logs/<prefijo>_y_pred.npy`, `logs/<prefijo>_matriz_confusion.npy`
-- Gráficos: `logs/<prefijo>_historico.png`, `logs/<prefijo>_metricas_*.png`
-- Reporte: `models/<prefijo>.pdf`
+- Datos crudos de evaluación: `logs/<prefijo>_y_test.npy`, `logs/<prefijo>_y_pred.npy`, `logs/<prefijo>_matriz_confusion.npy`
+- Reportes Documentados y Gráficos HD: Todo se organiza automáticamente dentro de `reportes/reporte_<prefijo>/` incluyendo el `<prefijo>.pdf` y gráficos `.png` independientes (600 DPI).
 - TFLite: `exports/exportsTflite/<prefijo>_modelo.tflite`
 - Parámetros de preprocesamiento: `exports/parametros-preprocesamiento/scaler_9_clases.json` y `exports/parametros-preprocesamiento/scaler_17_clases.json`
 
@@ -113,6 +112,14 @@ Autor: **Héctor (Estudiante de Licenciatura en Tecnologías Computacionales)**.
 - `--int8` (opcional): cuantización int8 para máxima compresión.
 - Si no especificas `--dataset` o `--input`, toma automáticamente el modelo de 17 clases.
 
+## 📊 Sistema de Reportes Automáticos (`generar_reporte.py`)
+El script `generar_reporte.py` es el encargado de consumir las predicciones (`y_test`, `y_pred`) y métricas (`_metricas.json`) guardadas durante el entrenamiento para construir un reporte técnico altamente profesional en PDF y extraer gráficos individuales en altísima resolución (600 DPI) listos para publicación externa o integración en otros documentos.
+
+**Características Principales de su Lógica:**
+- **Matrices de Confusión Inteligentes**: Escala y recorta dinámicamente el padding vacío de matrices provenientes de Sklearn (ej. si el array interno guardaba dimensionalidad de 34x34 pero solo existen 17 clases), garantizando que las celdas ocupen el 100% de la imagen. Habilita una leyenda de abreviaturas automática si exceden 10 clases para evitar el empalme de textos. Oculta las celdas en cero absoluto para reducir drásticamente el ruido visual.
+- **Gráficos Independientes de Alto DPI**: Separa y renderiza individualmente (1) el rendimiento global de las métricas principales, (2) el rendimiento de Precisión/Recall/F1 por clase, (3) el Soporte (muestras reales evaluadas) aislado de las demás barras, y (4) la evolución histórica del modelo durante el entrenamiento.
+- **Estructura Organizada**: Crea automáticamente subdirectorios en `reportes/reporte_<dataset_name>` donde guarda juntos todos los gráficos en formato `.png` acompañados del documento `*.pdf` final.
+
 ## 🗺️ Estructura del Proyecto
 ```
 TensorFlow/
@@ -123,8 +130,9 @@ TensorFlow/
 ├── data/
 │   ├── raw_float32/            # NPZ convertidos (se descargan con script)
 │   └── raw_float64/            # Backup/alternativa (también descargable)
-├── models/                     # .keras, métricas .json, PDFs
-├── logs/                       # y_test/y_pred/matriz_confusión + gráficos
+├── models/                     # .keras y métricas .json originadas del entrenamiento
+├── reportes/                   # Subcarpetas generadas por generar_reporte.py con el PDF y gráficos PNG HD
+├── logs/                       # Logs de Tensorboard y arrays (y_test, y_pred, matriz_confusion en .npy)
 ├── exports/
 │   ├── edge_impulse.edgei/     # Carpetas de clases (insumos etiquetados)
 │   ├── exportsTflite/          # Modelos .tflite listos para Android

@@ -1,9 +1,16 @@
 """
 Generación de Reporte Profesional en PDF
-Análisis completo del entrenamiento de la red neuronal
+Análisis completo del entrenamiento de la red neuronal convolucional (Conv1D)
+
+Arquitectura:
+- Red Convolucional 1D (Conv1D) optimizada para Edge AI
+- Bloques Conv1D + BatchNormalization + ReLU + MaxPooling1D
+- Global Average Pooling para reducir parámetros
+- Focal Loss con Label Smoothing para fronteras complejas
+- GaussianNoise como regularización en entrenamiento
 
 Incluye:
-- Resumen de métrica sde evaluación
+- Resumen de métricas de evaluación
 - Matriz de confusión
 - Gráficos de desempeño
 - Análisis por clase
@@ -37,6 +44,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 LOGS_DIR = Path(r"C:\Develop\TensorFlow\logs")
 MODELS_DIR = Path(r"C:\Develop\TensorFlow\models")
+REPORTES_DIR = Path(r"C:\Develop\TensorFlow\reportes")
 DATASET_NAME_RAW = os.getenv("DATASET_NAME", "adl_fall_multiclass").strip()
 MODEL_BASE_BY_DATASET = {
     "two_classes": "entrenamiento_9_clases",
@@ -52,6 +60,15 @@ MODEL_BASE_BY_DATASET = {
 # UTILIDADES
 # ============================================================================
 
+def _get_reporte_dir(dataset_name):
+    """
+    Crea y devuelve la ruta de la subcarpeta dedicada para el reporte.
+    """
+    base = _nombre_base_modelo(dataset_name)
+    ruta = REPORTES_DIR / f"reporte_{base}"
+    ruta.mkdir(parents=True, exist_ok=True)
+    return ruta
+
 def _borrar_artefactos_previos(dataset_name):
     """
     Elimina artefactos gráficos y PDF previos para garantizar regeneración fresca.
@@ -59,19 +76,27 @@ def _borrar_artefactos_previos(dataset_name):
     base = _nombre_base_modelo(dataset_name)
     pdf_nombre = _nombre_pdf(dataset_name)
     patrones = [
-        f"{base}_matriz_confusion.png",
+        f"{base}_matriz_confusion_abs.png",
+        f"{base}_matriz_confusion_norm.png",
         f"{base}_metricas_globales.png",
         f"{base}_metricas_por_clase.png",
+        f"{base}_soporte_por_clase.png",
         f"{base}_historico_completo.png",
         f"{base}_reporte_entrenamiento.pdf",
         pdf_nombre,
     ]
+    reporte_dir = _get_reporte_dir(dataset_name)
     for nombre in patrones:
-        ruta = (LOGS_DIR / nombre) if nombre.endswith(".png") else (MODELS_DIR / nombre)
-        try:
-            ruta.unlink(missing_ok=True)
-        except Exception:
-            pass
+        rutas = [
+            LOGS_DIR / nombre,
+            MODELS_DIR / nombre,
+            reporte_dir / nombre
+        ]
+        for ruta in rutas:
+            try:
+                ruta.unlink(missing_ok=True)
+            except Exception:
+                pass
 
 
 def _nombre_pdf(dataset_name):
@@ -206,13 +231,13 @@ def cargar_predicciones(dataset_name):
 
 def graficar_matriz_confusion(cm, nombres_clases, dataset_name):
     """
-    Genera y guarda gráfico de matriz de confusión mejorado.
+    Genera y guarda gráfico de matriz de confusión mejorado con alta resolución.
     
     Mejoras:
-    - Figsize aumentado para mejor legibilidad de matrices grandes (17 clases)
-    - Tamaño de fuente ajustado para anotaciones claras
-    - Rotación de etiquetas de ejes para evitar solapamiento
-    - Optimizado para matrices de cualquier tamaño
+    - Genera matrices en imágenes INDEPENDIENTES (abs y norm) para maximizar el tamaño en el PDF.
+    - Uso de abreviaciones lógicas para 17 clases con leyenda explicativa.
+    - Títulos descriptivos para dejar claro qué mide cada matriz.
+    - Alta calidad (600 DPI) para evitar pixelado.
 
     Args:
         cm (np.ndarray): Matriz de confusión
@@ -220,103 +245,150 @@ def graficar_matriz_confusion(cm, nombres_clases, dataset_name):
         dataset_name (str): Nombre del dataset
 
     Returns:
-        str: Ruta del archivo guardado
+        tuple: (ruta_abs, ruta_norm) Rutas de los archivos guardados
     """
     num_clases = max(1, len(nombres_clases))
     
-    # Figsize dinámico: matrices grandes requieren más espacio
-    if num_clases > 12:
-        figsize = (18, 14)  # Aumentado para 17 clases
-    elif num_clases > 8:
-        figsize = (14, 10)  # Aumentado para 9 clases
-    else:
-        figsize = (12, 8)
+    # Abreviaciones lógicas para dataset de muchas clases (ej. 17 clases)
+    usar_abreviaturas = num_clases > 10
+    etiquetas_ejes = nombres_clases
+    texto_leyenda = ""
     
-    fig, axes = plt.subplots(1, 2, figsize=figsize)
-    mostrar_anotaciones = num_clases <= 17  # Ahora soporta hasta 17 clases
+    if usar_abreviaturas:
+        abreviaciones = []
+        leyenda_items = []
+        for nombre in nombres_clases:
+            partes = nombre.replace('_', ' ').replace('-', ' ').split()
+            if len(partes) == 1:
+                abrev = nombre[:3].upper()
+            else:
+                abrev = "".join([p[:2].capitalize() for p in partes])
+            
+            # Resolver colisiones si se generan dos abreviaciones iguales
+            orig = abrev
+            c = 1
+            while abrev in abreviaciones:
+                abrev = f"{orig}{c}"
+                c += 1
+            abreviaciones.append(abrev)
+            leyenda_items.append(f"{abrev}: {nombre}")
+            
+        etiquetas_ejes = abreviaciones
+        
+        # Construir texto de leyenda dividido en múltiples líneas
+        lineas_leyenda = []
+        n_por_linea = 5 if num_clases <= 15 else 6
+        for i in range(0, len(leyenda_items), n_por_linea):
+            lineas_leyenda.append(" | ".join(leyenda_items[i:i+n_por_linea]))
+        texto_leyenda = "Leyenda de Abreviaciones:\n" + "\n".join(lineas_leyenda)
+    
+    # Figsize adaptado para UNA sola matriz por figura
+    if num_clases > 12:
+        figsize = (10, 8) if usar_abreviaturas else (12, 10)
+    elif num_clases > 8:
+        figsize = (9, 7)
+    else:
+        figsize = (8, 6)
+    
+    # Habilitar alta resolución en Matplotlib
+    plt.rcParams['figure.dpi'] = 600
+    plt.rcParams['savefig.dpi'] = 600
+    
+    mostrar_anotaciones = True
 
     # Tamaño de fuente dinámico
     if num_clases > 15:
-        annot_fontsize = 7
-    elif num_clases > 10:
         annot_fontsize = 8
+    elif num_clases > 10:
+        annot_fontsize = 9
     else:
-        annot_fontsize = 10
+        annot_fontsize = 11
 
-    # Matriz en conteos absolutos
+    base = _nombre_base_modelo(dataset_name)
+    reporte_dir = _get_reporte_dir(dataset_name)
+    ruta_abs = reporte_dir / f"{base}_matriz_confusion_abs.png"
+    ruta_norm = reporte_dir / f"{base}_matriz_confusion_norm.png"
+
+    # =========================================================
+    # 1. Matriz en conteos absolutos
+    # =========================================================
+    # Corregir problema de dimensiones si cm es más grande que las clases reales (ej. padding a 34x34)
+    cm = cm[:num_clases, :num_clases]
+    
+    fig_abs, ax_abs = plt.subplots(figsize=figsize)
     sns.heatmap(
         cm,
         annot=mostrar_anotaciones,
         fmt='d',
         cmap='Blues',
-        xticklabels=nombres_clases,
-        yticklabels=nombres_clases,
-        cbar_kws={'label': 'Conteo'},
+        xticklabels=etiquetas_ejes,
+        yticklabels=etiquetas_ejes,
+        cbar_kws={'label': 'Cantidad de Muestras'},
         annot_kws={'size': annot_fontsize},
-        ax=axes[0]
+        linewidths=0.5,
+        linecolor='lightgray',
+        square=True,
+        ax=ax_abs
     )
-    axes[0].set_title('Matriz de confusión (conteos absolutos)', fontsize=13, fontweight='bold')
-    axes[0].set_xlabel('Predicción', fontsize=11)
-    axes[0].set_ylabel('Etiqueta real', fontsize=11)
-    
-    # Rotación mejorada de etiquetas
-    axes[0].set_xticklabels(
-        axes[0].get_xticklabels(),
-        rotation=45,
-        ha='right',
-        fontsize=8 if num_clases > 10 else 9
-    )
-    axes[0].set_yticklabels(
-        axes[0].get_yticklabels(),
-        rotation=0,
-        fontsize=8 if num_clases > 10 else 9
-    )
+    ax_abs.set_title('Matriz de Confusión Absoluta\n(Total de muestras: Real vs Predicción)', fontsize=14, fontweight='bold', pad=15)
+    ax_abs.set_xlabel('Clase Predicha por el Modelo', fontsize=12, fontweight='bold')
+    ax_abs.set_ylabel('Clase Real (Verdadera)', fontsize=12, fontweight='bold')
+    ax_abs.set_xticklabels(ax_abs.get_xticklabels(), rotation=45, ha='right', fontsize=10)
+    ax_abs.set_yticklabels(ax_abs.get_yticklabels(), rotation=0, fontsize=10)
 
-    # Matriz normalizada por fila (recall por clase)
+    fig_abs.tight_layout()
+    
+    if usar_abreviaturas:
+        plt.subplots_adjust(bottom=0.25)
+        fig_abs.text(0.5, 0.02, texto_leyenda, ha='center', va='bottom', fontsize=10, 
+                 bbox=dict(boxstyle='round,pad=0.5', facecolor='#f8f9fa', edgecolor='#ced4da', alpha=0.9))
+
+    fig_abs.savefig(ruta_abs, dpi=600, bbox_inches='tight', format='png')
+    plt.close(fig_abs)
+
+    # =========================================================
+    # 2. Matriz normalizada por fila (Sensibilidad / Recall)
+    # =========================================================
     cm_f = cm.astype(np.float32)
     suma_filas = cm_f.sum(axis=1, keepdims=True)
     suma_filas[suma_filas == 0] = 1.0
     cm_norm = cm_f / suma_filas
+    
+    fig_norm, ax_norm = plt.subplots(figsize=figsize)
     sns.heatmap(
         cm_norm,
         annot=mostrar_anotaciones,
         fmt='.2f',
         cmap='Greens',
-        xticklabels=nombres_clases,
-        yticklabels=nombres_clases,
+        xticklabels=etiquetas_ejes,
+        yticklabels=etiquetas_ejes,
         vmin=0.0,
         vmax=1.0,
-        cbar_kws={'label': 'Proporción (Recall)'},
+        cbar_kws={'label': 'Proporción de Aciertos'},
         annot_kws={'size': annot_fontsize},
-        ax=axes[1]
+        linewidths=0.5,
+        linecolor='lightgray',
+        square=True,
+        ax=ax_norm
     )
-    axes[1].set_title('Matriz de confusión (normalizada por fila)', fontsize=13, fontweight='bold')
-    axes[1].set_xlabel('Predicción', fontsize=11)
-    axes[1].set_ylabel('Etiqueta real', fontsize=11)
+    ax_norm.set_title('Matriz de Confusión Normalizada\n(Sensibilidad: % de aciertos por clase real)', fontsize=14, fontweight='bold', pad=15)
+    ax_norm.set_xlabel('Clase Predicha por el Modelo', fontsize=12, fontweight='bold')
+    ax_norm.set_ylabel('Clase Real (Verdadera)', fontsize=12, fontweight='bold')
+    ax_norm.set_xticklabels(ax_norm.get_xticklabels(), rotation=45, ha='right', fontsize=10)
+    ax_norm.set_yticklabels(ax_norm.get_yticklabels(), rotation=0, fontsize=10)
+
+    fig_norm.tight_layout()
     
-    # Rotación mejorada de etiquetas
-    axes[1].set_xticklabels(
-        axes[1].get_xticklabels(),
-        rotation=45,
-        ha='right',
-        fontsize=8 if num_clases > 10 else 9
-    )
-    axes[1].set_yticklabels(
-        axes[1].get_yticklabels(),
-        rotation=0,
-        fontsize=8 if num_clases > 10 else 9
-    )
+    if usar_abreviaturas:
+        plt.subplots_adjust(bottom=0.25)
+        fig_norm.text(0.5, 0.02, texto_leyenda, ha='center', va='bottom', fontsize=10, 
+                 bbox=dict(boxstyle='round,pad=0.5', facecolor='#f8f9fa', edgecolor='#ced4da', alpha=0.9))
 
-    fig.suptitle(f'Matriz de Confusión - {dataset_name.upper()}', fontsize=15, fontweight='bold')
-    plt.tight_layout()
+    fig_norm.savefig(ruta_norm, dpi=600, bbox_inches='tight', format='png')
+    plt.close(fig_norm)
 
-    base = _nombre_base_modelo(dataset_name)
-    ruta_grafico = LOGS_DIR / f"{base}_matriz_confusion.png"
-    plt.savefig(ruta_grafico, dpi=300, bbox_inches='tight')
-    plt.close()
-
-    print(f"✓ Matriz de confusión mejorada guardada: {ruta_grafico}")
-    return ruta_grafico
+    print("✓ Matrices de confusión (abs y norm) guardadas individualmente.")
+    return ruta_abs, ruta_norm
 
 
 def _obtener_metricas_por_clase(metricas):
@@ -363,8 +435,9 @@ def graficar_metricas_evaluacion(metricas, dataset_name):
 
     plt.tight_layout()
     base = _nombre_base_modelo(dataset_name)
-    ruta_grafico = LOGS_DIR / f"{base}_metricas_globales.png"
-    plt.savefig(ruta_grafico, dpi=300, bbox_inches='tight')
+    reporte_dir = _get_reporte_dir(dataset_name)
+    ruta_grafico = reporte_dir / f"{base}_metricas_globales.png"
+    plt.savefig(ruta_grafico, dpi=600, bbox_inches='tight', format='png')
     plt.close()
     print(f"✓ Gráfico de métricas globales guardado: {ruta_grafico}")
     return ruta_grafico
@@ -395,36 +468,51 @@ def graficar_metricas_por_clase(metricas, nombres_clases, dataset_name):
 
     x = np.arange(len(clases))
     ancho = 0.25
-    fig, axes = plt.subplots(2, 1, figsize=(16, 10), gridspec_kw={'height_ratios': [2, 1]})
+    
+    # Resolucion y calidad
+    plt.rcParams['figure.dpi'] = 600
+    plt.rcParams['savefig.dpi'] = 600
 
-    # Precisión/Recall/F1 por clase
-    axes[0].bar(x - ancho, precision, width=ancho, label='Precisión', color='#2ca02c')
-    axes[0].bar(x, recall, width=ancho, label='Recall', color='#1f77b4')
-    axes[0].bar(x + ancho, f1, width=ancho, label='F1-score', color='#d62728')
-    axes[0].set_ylim(0, 1)
-    axes[0].set_ylabel('Score')
-    axes[0].set_title('Precisión, Recall y F1 por clase', fontsize=12, fontweight='bold')
-    axes[0].set_xticks(x)
-    axes[0].set_xticklabels(clases, rotation=45, ha='right', fontsize=8)
-    axes[0].grid(True, axis='y', alpha=0.3)
-    axes[0].legend()
-
-    # Soporte por clase
-    axes[1].bar(x, soporte, color='gray')
-    axes[1].set_title('Soporte (muestras de test) por clase', fontsize=12, fontweight='bold')
-    axes[1].set_ylabel('Muestras')
-    axes[1].set_xticks(x)
-    axes[1].set_xticklabels(clases, rotation=45, ha='right', fontsize=8)
-    axes[1].grid(True, axis='y', alpha=0.3)
-
-    plt.tight_layout()
+    # 1. Gráfico de Precisión, Recall y F1
+    figsize_metrics = (14, 6) if len(clases) <= 10 else (16, 7)
+    fig_metrics, ax_metrics = plt.subplots(figsize=figsize_metrics)
+    
+    ax_metrics.bar(x - ancho, precision, width=ancho, label='Precisión', color='#2ca02c')
+    ax_metrics.bar(x, recall, width=ancho, label='Recall', color='#1f77b4')
+    ax_metrics.bar(x + ancho, f1, width=ancho, label='F1-score', color='#d62728')
+    ax_metrics.set_ylim(0, 1.05)
+    ax_metrics.set_ylabel('Score')
+    ax_metrics.set_title('Métricas de Desempeño por Clase (Precisión, Recall y F1)', fontsize=14, fontweight='bold', pad=15)
+    ax_metrics.set_xticks(x)
+    ax_metrics.set_xticklabels(clases, rotation=45, ha='right', fontsize=9 if len(clases) > 10 else 11)
+    ax_metrics.grid(True, axis='y', alpha=0.3)
+    ax_metrics.legend(loc='lower right')
+    
+    fig_metrics.tight_layout()
+    reporte_dir = _get_reporte_dir(dataset_name)
     base = _nombre_base_modelo(dataset_name)
-    ruta_grafico = LOGS_DIR / f"{base}_metricas_por_clase.png"
-    plt.savefig(ruta_grafico, dpi=300, bbox_inches='tight')
-    plt.close()
+    ruta_metricas = reporte_dir / f"{base}_metricas_por_clase.png"
+    fig_metrics.savefig(ruta_metricas, dpi=600, bbox_inches='tight', format='png')
+    plt.close(fig_metrics)
+    
+    # 2. Gráfico de Soporte
+    figsize_support = (14, 4) if len(clases) <= 10 else (16, 5)
+    fig_support, ax_support = plt.subplots(figsize=figsize_support)
+    
+    ax_support.bar(x, soporte, color='#6c757d')
+    ax_support.set_title('Soporte (Cantidad Real de Muestras de Evaluación por Clase)', fontsize=14, fontweight='bold', pad=15)
+    ax_support.set_ylabel('Cantidad de Muestras')
+    ax_support.set_xticks(x)
+    ax_support.set_xticklabels(clases, rotation=45, ha='right', fontsize=9 if len(clases) > 10 else 11)
+    ax_support.grid(True, axis='y', alpha=0.3)
+    
+    fig_support.tight_layout()
+    ruta_soporte = reporte_dir / f"{base}_soporte_por_clase.png"
+    fig_support.savefig(ruta_soporte, dpi=600, bbox_inches='tight', format='png')
+    plt.close(fig_support)
 
-    print(f"✓ Gráfico de métricas guardado: {ruta_grafico}")
-    return ruta_grafico
+    print("✓ Gráficos de métricas y soporte guardados individualmente.")
+    return ruta_metricas, ruta_soporte
 
 
 def graficar_historico_completo(metricas, dataset_name):
@@ -468,8 +556,9 @@ def graficar_historico_completo(metricas, dataset_name):
 
     plt.tight_layout()
     base = _nombre_base_modelo(dataset_name)
-    ruta_grafico = LOGS_DIR / f"{base}_historico_completo.png"
-    plt.savefig(ruta_grafico, dpi=300, bbox_inches='tight')
+    reporte_dir = _get_reporte_dir(dataset_name)
+    ruta_grafico = reporte_dir / f"{base}_historico_completo.png"
+    plt.savefig(ruta_grafico, dpi=600, bbox_inches='tight', format='png')
     plt.close()
 
     print(f"✓ Gráfico de histórico completo guardado: {ruta_grafico}")
@@ -853,14 +942,15 @@ def generar_pdf(dataset_name):
         tabla_detalle_clases = crear_tabla_detalle_clases(metricas)
 
         # Generar gráficos necesarios
-        ruta_matriz = graficar_matriz_confusion(cm, nombres_clases, dataset_name)
+        ruta_matriz_abs, ruta_matriz_norm = graficar_matriz_confusion(cm, nombres_clases, dataset_name)
         ruta_metricas_globales = graficar_metricas_evaluacion(metricas, dataset_name)
-        ruta_metricas = graficar_metricas_por_clase(metricas, nombres_clases, dataset_name)
+        ruta_metricas, ruta_soporte = graficar_metricas_por_clase(metricas, nombres_clases, dataset_name)
         ruta_historico = graficar_historico_completo(metricas, dataset_name)
         tabla_reporte_clasificacion, texto_accuracy = crear_tabla_reporte_clasificacion(metricas)
 
         # Crear documento PDF
-        ruta_pdf = MODELS_DIR / _nombre_pdf(dataset_name)
+        reporte_dir = _get_reporte_dir(dataset_name)
+        ruta_pdf = reporte_dir / _nombre_pdf(dataset_name)
         doc = SimpleDocTemplate(
             str(ruta_pdf),
             pagesize=letter,
@@ -878,7 +968,7 @@ def generar_pdf(dataset_name):
 
         # Página 1: Portada y resumen
         contenido.append(Paragraph("REPORTE DE ENTRENAMIENTO", titulo_style))
-        contenido.append(Paragraph("Red Neuronal para Clasificación de Actividades", subtitulo_style))
+        contenido.append(Paragraph("Red Neuronal Convolucional 1D (Conv1D) — Clasificación de Actividades", subtitulo_style))
         contenido.append(Spacer(1, 0.3*inch))
 
         contenido.append(Paragraph(f"Dataset: <b>{dataset_name.upper()}</b>", normal_style))
@@ -888,9 +978,13 @@ def generar_pdf(dataset_name):
         # Resumen ejecutivo
         contenido.append(Paragraph("RESUMEN EJECUTIVO", subtitulo_style))
         resumen_text = f"""
-        Se ha entrenado una red neuronal profunda para la clasificación de actividades humanas
-        usando datos de acelerómetro. El modelo alcanzó una precisión de <b>{metricas['accuracy']:.2%}</b>
-        en el conjunto de prueba con <b>{metricas['num_muestras_test']}</b> muestras evaluadas.
+        Se ha entrenado una <b>red neuronal convolucional 1D (Conv1D)</b> para la clasificación de
+        actividades humanas usando datos de acelerómetro triaxial. La arquitectura consta de tres
+        bloques Conv1D con BatchNormalization, MaxPooling1D y Global Average Pooling, seguida de
+        una capa densa final. El entrenamiento usó <b>Focal Loss</b> con label smoothing y
+        <b>GaussianNoise</b> como regularización. El modelo alcanzó una precisión de
+        <b>{metricas['accuracy']:.2%}</b> en el conjunto de prueba con
+        <b>{metricas['num_muestras_test']}</b> muestras evaluadas.
         Se identificaron <b>{len(metricas['clases'])}</b> clases diferentes.
         """
         contenido.append(Paragraph(resumen_text, normal_style))
@@ -916,20 +1010,41 @@ def generar_pdf(dataset_name):
             contenido.append(Image(str(ruta_historico), width=6.5*inch, height=2.5*inch))
         contenido.append(PageBreak())
 
-        # Página 3: Matriz de confusión
-        contenido.append(Paragraph("MATRICES DE CONFUSIÓN", subtitulo_style))
-        if ruta_matriz.exists():
-            contenido.append(Image(str(ruta_matriz), width=6.5*inch, height=5.5*inch))
+        # Página 3: Matriz de confusión absoluta
+        contenido.append(Paragraph("MATRIZ DE CONFUSIÓN ABSOLUTA", subtitulo_style))
+        if ruta_matriz_abs.exists():
+            contenido.append(Image(str(ruta_matriz_abs), width=6.5*inch, height=6.0*inch))
+        contenido.append(PageBreak())
+
+        # Página 4: Matriz de confusión normalizada
+        contenido.append(Paragraph("MATRIZ DE CONFUSIÓN NORMALIZADA", subtitulo_style))
+        if ruta_matriz_norm.exists():
+            contenido.append(Image(str(ruta_matriz_norm), width=6.5*inch, height=6.0*inch))
             contenido.append(Spacer(1, 0.15*inch))
             # Agregar resumen de métricas por clase
             resumen_html = extraer_resumen_metricas(metricas)
             contenido.append(Paragraph(resumen_html, normal_style))
         contenido.append(PageBreak())
 
-        # Página 4: Métricas por clase
-        contenido.append(Paragraph("PRECISIÓN Y RECUPERACIÓN POR CLASE", subtitulo_style))
+        # Página 5: Métricas por clase
+        contenido.append(Paragraph("DESEMPEÑO Y DISTRIBUCIÓN POR CLASE", subtitulo_style))
+        
+        explicacion_texto = """
+        El siguiente gráfico detalla la <b>Precisión, Sensibilidad (Recall) y F1-Score</b> logrados para cada clase individual. 
+        Estas métricas permiten comprender en qué acciones específicas el modelo tiene mayor exactitud y cuáles presentan un mayor desafío. 
+        A continuación, se muestra el gráfico de <b>Soporte</b>, que indica la cantidad exacta de muestras reales que se usaron para evaluar cada clase. 
+        Esto es vital para dimensionar si un desempeño bajo en una clase se debe a la falta de datos representativos o a la complejidad del movimiento.
+        """
+        contenido.append(Paragraph(explicacion_texto, normal_style))
+        contenido.append(Spacer(1, 0.1*inch))
+        
         if ruta_metricas.exists():
-            contenido.append(Image(str(ruta_metricas), width=6.5*inch, height=4.8*inch))
+            contenido.append(Image(str(ruta_metricas), width=6.5*inch, height=3.0*inch))
+            contenido.append(Spacer(1, 0.15*inch))
+            
+        if ruta_soporte.exists():
+            contenido.append(Image(str(ruta_soporte), width=6.5*inch, height=2.2*inch))
+            
         contenido.append(PageBreak())
 
         contenido.append(Paragraph("REPORTE DE CLASIFICACIÓN", subtitulo_style))
@@ -955,14 +1070,17 @@ def generar_pdf(dataset_name):
 
         modelo_info = metricas.get('modelo_info', {})
         resumen_arquitectura = (
-            f"Input shape: {modelo_info.get('input_shape', 'N/D')} | "
-            f"Output shape: {modelo_info.get('output_shape', 'N/D')} | "
-            f"Capas totales: {modelo_info.get('total_capas', 'N/D')} | "
-            f"Parámetros totales: {modelo_info.get('parametros_totales', 'N/D')} | "
-            f"Optimizador: {modelo_info.get('optimizador', 'N/D')} "
-            f"(lr={modelo_info.get('learning_rate', 'N/D')})"
+            f"<b>Tipo:</b> Red Convolucional 1D (Conv1D) para Edge AI | "
+            f"<b>Input:</b> {modelo_info.get('input_shape', 'N/D')} → Reshape (3,151) → Permute (151,3) | "
+            f"<b>Output:</b> {modelo_info.get('output_shape', 'N/D')} | "
+            f"<b>Bloques Conv1D:</b> 3 (64→128→256 filtros) + GlobalAvgPool + Dense(128) | "
+            f"<b>Capas totales:</b> {modelo_info.get('total_capas', 'N/D')} | "
+            f"<b>Parámetros:</b> {modelo_info.get('parametros_totales', 'N/D')} | "
+            f"<b>Optimizador:</b> {modelo_info.get('optimizador', 'N/D')} "
+            f"(lr={modelo_info.get('learning_rate', 'N/D')}) | "
+            f"<b>Loss:</b> Focal Loss (alpha=0.25, gamma=2.0, label_smoothing=0.1)"
         )
-        contenido.append(Paragraph("Arquitectura de la red por capas", subtitulo_style))
+        contenido.append(Paragraph("Arquitectura Conv1D por capas", subtitulo_style))
         contenido.append(Paragraph(resumen_arquitectura, normal_style))
         contenido.append(crear_tabla_arquitectura_modelo(metricas))
         contenido.append(Spacer(1, 0.2*inch))
