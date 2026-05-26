@@ -19,7 +19,6 @@ from sklearn.metrics import (
     precision_score, recall_score, f1_score
 )
 import matplotlib.pyplot as plt
-import seaborn as sns
 from pathlib import Path
 import json
 import os
@@ -543,7 +542,7 @@ def entrenar_modelo(model, X_train, y_train, X_val, y_val, epochs=100):
     )
     class_weight_dict = {i: w for i, w in enumerate(class_weights)}
     
-    print(f"✓ Pesos de clase calculados (balanceo dinámico):")
+    print("✓ Pesos de clase calculados (balanceo dinámico):")
     for cls_idx, weight in class_weight_dict.items():
         print(f"  Clase {cls_idx}: {weight:.4f}")
 
@@ -650,7 +649,7 @@ def evaluar_modelo(model, X_test, y_test, nombres_clases):
     macro_f1 = f1_score(y_test_class, y_pred, average='macro', zero_division=0)
 
     print(f"\n{'='*50}")
-    print(f"MÉTRICAS DE EVALUACIÓN")
+    print("MÉTRICAS DE EVALUACIÓN")
     print(f"{'='*50}")
     print(f"Precisión (Accuracy):     {accuracy:.4f}")
     print(f"Precisión (Weighted):     {precision:.4f}")
@@ -660,7 +659,7 @@ def evaluar_modelo(model, X_test, y_test, nombres_clases):
 
     # Reporte por clase
     print(f"\n{'='*50}")
-    print(f"REPORTE POR CLASE")
+    print("REPORTE POR CLASE")
     print(f"{'='*50}")
     reporte_clasificacion = classification_report(
         y_test_class,

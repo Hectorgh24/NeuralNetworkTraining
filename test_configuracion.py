@@ -33,7 +33,7 @@ try:
     data_dir = BASE_DIR / "data" / "raw_float32"
     acc_data = np.load(data_dir / 'acc_data.npz', allow_pickle=True)['acc_data']
     acc_labels = np.load(data_dir / 'acc_labels.npz', allow_pickle=True)['acc_labels']
-    print(f"✓ Datos cargados exitosamente")
+    print("✓ Datos cargados exitosamente")
     print(f"  - Muestras: {acc_data.shape[0]}")
     print(f"  - Características: {acc_data.shape[1]}")
     print(f"  - Tipo: {acc_data.dtype}")
@@ -54,7 +54,7 @@ try:
         loss='sparse_categorical_crossentropy',
         metrics=['accuracy']
     )
-    print(f"✓ Modelo creado exitosamente")
+    print("✓ Modelo creado exitosamente")
     print(f"  - Parámetros totales: {model.count_params():,}")
 except Exception as e:
     print(f"✗ Error creando modelo: {e}")
@@ -72,7 +72,7 @@ try:
         batch_size=32,
         verbose=0
     )
-    print(f"✓ Entrenamiento de prueba exitoso")
+    print("✓ Entrenamiento de prueba exitoso")
     print(f"  - Loss: {history.history['loss'][0]:.4f}")
     print(f"  - Accuracy: {history.history['accuracy'][0]:.4f}")
 except Exception as e:
