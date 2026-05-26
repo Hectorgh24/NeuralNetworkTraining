@@ -6,7 +6,8 @@ import numpy as np
 from pathlib import Path
 
 # Ruta a los datos
-data_dir = Path(r"C:\Develop\TensorFlow\data\raw_float32")
+BASE_DIR = Path(__file__).resolve().parents[1]
+data_dir = BASE_DIR / "data" / "raw_float32"
 
 # ===== OPCION 1: Cargar archivos NPZ (recomendado, más eficiente) =====
 print("Cargando datos desde NPZ...")

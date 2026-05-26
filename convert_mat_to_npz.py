@@ -3,8 +3,9 @@ import numpy as np
 import sys
 from pathlib import Path
 
-# Usar Path para compatibilidad con Windows
-raw_dir = Path(r"C:\Develop\TensorFlow\data\raw_float32")
+# Usar Path de forma relativa al script
+BASE_DIR = Path(__file__).resolve().parent
+raw_dir = BASE_DIR / "data" / "raw_float32"
 
 print("=" * 70)
 print("Convirtiendo archivos MAT a NPZ (sin borrar originales)")

@@ -41,10 +41,10 @@ if hasattr(sys.stdout, "reconfigure"):
 # ============================================================================
 # CONFIGURACIÓN
 # ============================================================================
-
-LOGS_DIR = Path(r"C:\Develop\TensorFlow\logs")
-MODELS_DIR = Path(r"C:\Develop\TensorFlow\models")
-REPORTES_DIR = Path(r"C:\Develop\TensorFlow\reportes")
+BASE_DIR = Path(__file__).resolve().parents[1]
+LOGS_DIR = BASE_DIR / "logs"
+MODELS_DIR = BASE_DIR / "models"
+REPORTES_DIR = BASE_DIR / "reportes"
 DATASET_NAME_RAW = os.getenv("DATASET_NAME", "adl_fall_multiclass").strip()
 MODEL_BASE_BY_DATASET = {
     "two_classes": "entrenamiento_9_clases",

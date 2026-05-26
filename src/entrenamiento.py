@@ -36,9 +36,10 @@ if hasattr(sys.stdout, "reconfigure"):
 # ============================================================================
 
 # Rutas
-DATA_DIR = Path(r"C:\Develop\TensorFlow\data\raw_float32")
-MODELS_DIR = Path(r"C:\Develop\TensorFlow\models")
-LOGS_DIR = Path(r"C:\Develop\TensorFlow\logs")
+BASE_DIR = Path(__file__).resolve().parents[1]
+DATA_DIR = BASE_DIR / "data" / "raw_float32"
+MODELS_DIR = BASE_DIR / "models"
+LOGS_DIR = BASE_DIR / "logs"
 
 # Crear directorios si no existen
 MODELS_DIR.mkdir(exist_ok=True)

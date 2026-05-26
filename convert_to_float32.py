@@ -5,8 +5,9 @@ print("=" * 70)
 print("Converting NPZ files from float64 to float32")
 print("=" * 70)
 
-original_dir = Path(r"C:\Develop\TensorFlow\data\raw_float64_original")
-output_dir = Path(r"C:\Develop\TensorFlow\data\raw_float32")
+BASE_DIR = Path(__file__).resolve().parent
+original_dir = BASE_DIR / "data" / "raw_float64_original"
+output_dir = BASE_DIR / "data" / "raw_float32"
 
 npz_files = sorted(original_dir.glob("*.npz"))
 
