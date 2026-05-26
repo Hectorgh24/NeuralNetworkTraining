@@ -45,7 +45,8 @@ except Exception as e:
 print("\n[4/5] Probando construcción de modelo...")
 try:
     model = tf.keras.Sequential([
-        tf.keras.layers.Dense(128, activation='relu', input_shape=(453,)),
+        tf.keras.layers.Input(shape=(453,)),
+        tf.keras.layers.Dense(128, activation='relu'),
         tf.keras.layers.Dropout(0.2),
         tf.keras.layers.Dense(30, activation='softmax')
     ])

@@ -49,6 +49,7 @@ DATASET_NAME_RAW = os.getenv(
     "DATASET_NAME",
     "adl_fall_multiclass"
 ).strip()
+DATASET_NAME = DATASET_NAME_RAW
 TEST_SIZE = 0.2
 VALIDATION_SIZE = 0.2
 RANDOM_STATE = 42
